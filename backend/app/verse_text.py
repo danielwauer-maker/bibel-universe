@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from urllib.parse import quote
 
 from bs4 import BeautifulSoup, NavigableString, Tag
 
@@ -15,15 +16,26 @@ class LiveVerseText:
     source_url: str
 
 
-def _book_slug(book_id: int) -> str:
+def _book_path(book_id: int) -> str:
+    """Build the public JW.org Study Bible book path from the real German name.
+
+    Our internal slugs are ASCII-normalized (for example ``matthaeus``), while
+    JW.org uses the actual German book name in the public URL (``Matthäus``).
+    Deriving the path from ``name_de`` keeps umlauts intact and also works for
+    numbered books such as ``2. Petrus`` -> ``2-Petrus``.
+    """
     if book_id < 1 or book_id > len(BOOKS):
         raise RuntimeError(f"Unknown Bible book id: {book_id}")
-    return BOOKS[book_id - 1][1]
+    name_de = BOOKS[book_id - 1][2]
+    path = name_de.replace(". ", "-").replace(" ", "-")
+    return quote(path, safe="-")
 
 
 def _jw_url(book_id: int, chapter_number: int) -> str:
-    slug = _book_slug(book_id)
-    return f"https://www.jw.org/de/bibliothek/bibel/studienbibel/buecher/{slug}/{chapter_number}/"
+    return (
+        "https://www.jw.org/de/bibliothek/bibel/studienbibel/buecher/"
+        f"{_book_path(book_id)}/{chapter_number}/"
+    )
 
 
 def _wol_url(book_id: int, chapter_number: int) -> str:
@@ -160,12 +172,6 @@ def _wol_numeric_marker(tag: Tag) -> bool:
 
 
 def parse_wol_verse_text(html: str, chapter_number: int, verse_number: int) -> str | None:
-    """Fallback parser for WOL.
-
-    WOL represents verse 1 differently on some chapters: the chapter number itself
-    acts as the first marker. This is why Mat 17:1 could fail on the JW.org parser
-    while later verses such as 2Pe 1:16 succeeded.
-    """
     soup = BeautifulSoup(html, "html.parser")
     heading = _wol_scripture_heading(soup, chapter_number)
     if heading is None:
@@ -210,21 +216,26 @@ def parse_wol_verse_text(html: str, chapter_number: int, verse_number: int) -> s
 
 
 def fetch_live_verse_text(book_id: int, chapter_number: int, verse_number: int) -> LiveVerseText:
-    # Primary source: JW.org Study Bible. This works reliably for the normal
-    # numbered verse markers used by most verses.
+    # Primary source: the public JW.org Study Bible. A broken/changed JW.org URL
+    # must not prevent the official WOL fallback from being attempted.
     jw_url = _jw_url(book_id, chapter_number)
-    jw_html = _http_get(jw_url)
-    text = parse_verse_text(jw_html, chapter_number, verse_number)
-    if text:
-        return LiveVerseText(text=text, source_url=jw_url)
+    try:
+        jw_html = _http_get(jw_url)
+        text = parse_verse_text(jw_html, chapter_number, verse_number)
+        if text:
+            return LiveVerseText(text=text, source_url=jw_url)
+    except Exception:
+        pass
 
-    # Official WOL mirrors the same NWT Study Bible and is a robust fallback for
-    # markup variants, especially verse 1 where the chapter number can be the
-    # visible first marker.
+    # Official WOL mirrors the same NWT Study Bible and remains the fallback for
+    # verse-marker/layout variants, including the special rendering of verse 1.
     wol_url = _wol_url(book_id, chapter_number)
-    wol_html = _http_get(wol_url)
-    text = parse_wol_verse_text(wol_html, chapter_number, verse_number)
-    if text:
-        return LiveVerseText(text=text, source_url=wol_url)
+    try:
+        wol_html = _http_get(wol_url)
+        text = parse_wol_verse_text(wol_html, chapter_number, verse_number)
+        if text:
+            return LiveVerseText(text=text, source_url=wol_url)
+    except Exception as exc:
+        raise RuntimeError(f"Verse text unavailable on JW.org and WOL: {exc}") from exc
 
     raise RuntimeError("Verse text could not be identified on JW.org or WOL")
