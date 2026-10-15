@@ -26,16 +26,40 @@ def _is_numeric_marker(tag: Tag) -> bool:
         return False
 
     attrs = " ".join(
-        [str(tag.get("id", "")), " ".join(tag.get("class", [])), str(tag.get("href", "")), str(tag.get("data-pid", ""))]
+        [
+            str(tag.get("id", "")),
+            " ".join(tag.get("class", [])),
+            str(tag.get("href", "")),
+            str(tag.get("data-pid", "")),
+        ]
     ).lower()
-    # The Study Bible uses verse/chapter anchors. Keep this deliberately broad so
-    # small WOL markup changes do not immediately break the local reader.
     return any(token in attrs for token in ("verse", "v", "chapter", "#v", "data-pid")) or tag.name == "a"
 
 
-def _scripture_heading(soup: BeautifulSoup) -> Tag | None:
+def _scripture_heading(soup: BeautifulSoup, chapter_number: int) -> Tag | None:
+    """Find the chapter heading that precedes the rendered Bible text.
+
+    Older logic only handled headings beginning with "Nach" plus Psalms/Proverbs,
+    which broke for letters such as 2. Peter. WOL chapter headings vary by book,
+    so prefer a generic heading ending in the requested chapter number while
+    excluding per-verse study headings such as "2. Petrus 1:16".
+    """
     headings = soup.find_all(["h1", "h2", "h3"])
-    for heading in reversed(headings):
+    chapter_suffix = re.compile(rf"(?:^|\s){chapter_number}\s*$")
+
+    candidates: list[Tag] = []
+    for heading in headings:
+        text = heading.get_text(" ", strip=True).replace("\xa0", " ").strip()
+        if not text or ":" in text or len(text) > 100:
+            continue
+        if chapter_suffix.search(text):
+            candidates.append(heading)
+
+    if candidates:
+        return candidates[0]
+
+    # Backward-compatible fallback for markup variants seen in Gospel/Psalm pages.
+    for heading in headings:
         text = heading.get_text(" ", strip=True)
         if text.startswith("Nach ") or text.startswith("Psalm") or text.startswith("Sprüche"):
             return heading
@@ -54,7 +78,7 @@ def _clean_text(parts: list[str]) -> str:
 
 def parse_verse_text(html: str, chapter_number: int, verse_number: int) -> str | None:
     soup = BeautifulSoup(html, "html.parser")
-    heading = _scripture_heading(soup)
+    heading = _scripture_heading(soup, chapter_number)
     if heading is None:
         return None
 
@@ -66,19 +90,15 @@ def parse_verse_text(html: str, chapter_number: int, verse_number: int) -> str |
     if not markers:
         return None
 
-    # In the rendered NWT chapter body verse 1 is introduced by the chapter
-    # number itself; verses 2+ have their own numbered markers.
     start_marker: Tag | None = None
     if verse_number == 1:
         for marker in markers:
-            marker_text = marker.get_text(" ", strip=True).strip()
-            if marker_text == str(chapter_number):
+            if marker.get_text(" ", strip=True).strip() == str(chapter_number):
                 start_marker = marker
                 break
     else:
         for marker in markers:
-            marker_text = marker.get_text(" ", strip=True).strip()
-            if marker_text == str(verse_number):
+            if marker.get_text(" ", strip=True).strip() == str(verse_number):
                 start_marker = marker
                 break
 
@@ -95,7 +115,6 @@ def parse_verse_text(html: str, chapter_number: int, verse_number: int) -> str |
         if isinstance(element, Tag):
             if element.name in {"script", "style", "input", "button"}:
                 continue
-            # Stop before page chrome after the last verse.
             element_text = element.get_text(" ", strip=True)
             if verse_number > 1 and element.name in {"h1", "h2", "h3", "h4"} and element_text:
                 break
@@ -113,8 +132,6 @@ def parse_verse_text(html: str, chapter_number: int, verse_number: int) -> str |
     text = _clean_text(parts)
     if not text:
         return None
-
-    # Defensive cap: the endpoint is for one verse, never a chapter dump.
     return text[:2400]
 
 
