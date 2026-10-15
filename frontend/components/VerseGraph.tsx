@@ -280,6 +280,14 @@ export default function VerseGraph({ data }: { data: VerseGraphData }) {
             const targetNode = nodeMap.get(edge.target);
             if (!source || !targetNode) return null;
             const active = edge.source === selectedId || edge.target === selectedId;
+
+            // The stored edge keeps its canonical/source-data direction. The animated
+            // journey pulse is a UI layer: once a connected node is selected, the pulse
+            // must visually radiate out from that active node toward its neighbour.
+            const selectedIsTarget = active && edge.target === selectedId;
+            const pulseSource = selectedIsTarget ? targetNode.position : source.position;
+            const pulseTarget = selectedIsTarget ? source.position : targetNode.position;
+
             return (
               <group key={edge.id}>
                 <Line
@@ -290,8 +298,8 @@ export default function VerseGraph({ data }: { data: VerseGraphData }) {
                   opacity={active ? 0.94 : 0.42}
                 />
                 <AnimatedConnection
-                  source={source.position}
-                  target={targetNode.position}
+                  source={pulseSource}
+                  target={pulseTarget}
                   active={active}
                   phase={(index * 0.31) % 1}
                 />
