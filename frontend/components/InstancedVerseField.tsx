@@ -62,12 +62,21 @@ export default function InstancedVerseField({
       color: "#ffffff",
       vertexColors: true,
       transparent: true,
-      opacity: 0.98,
+      opacity: 1,
       toneMapped: false,
       depthWrite: true,
     });
     const next = new InstancedMesh(geometry, material, data.count);
     next.frustumCulled = false;
+
+    // Three.js decides whether the shader needs per-instance colors when the
+    // material is compiled for the first time. The mesh can be rendered once
+    // before React effects run, so make instanceColor exist immediately.
+    const white = new Color(1, 1, 1);
+    for (let i = 0; i < data.count; i++) next.setColorAt(i, white);
+    if (next.instanceColor) next.instanceColor.needsUpdate = true;
+    material.needsUpdate = true;
+
     return next;
   }, [data.count]);
 
@@ -95,9 +104,9 @@ export default function InstancedVerseField({
       mesh.setMatrixAt(i, dummy.matrix);
 
       tempColor.setRGB(
-        Math.max(0.12, colors[i * 3]),
-        Math.max(0.12, colors[i * 3 + 1]),
-        Math.max(0.12, colors[i * 3 + 2]),
+        Math.max(0.18, colors[i * 3]),
+        Math.max(0.18, colors[i * 3 + 1]),
+        Math.max(0.18, colors[i * 3 + 2]),
       );
       if (selected) tempColor.offsetHSL(0, 0.1, 0.24);
       mesh.setColorAt(i, tempColor);
@@ -105,6 +114,7 @@ export default function InstancedVerseField({
 
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    (mesh.material as MeshBasicMaterial).needsUpdate = true;
     mesh.computeBoundingSphere();
   }, [mesh, data, colors, selectedIndex]);
 
