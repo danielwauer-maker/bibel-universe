@@ -50,13 +50,13 @@ export default function HomePage() {
   const [books, setBooks] = useState<Book[]>([]);
   const [graph, setGraph] = useState<VerseGraphData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [graphFocus, setGraphFocus] = useState("Mat 17:1");
+  const [visibleEdgeCount, setVisibleEdgeCount] = useState(0);
 
   useEffect(() => {
     const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8010";
     const controller = new AbortController();
 
-    // Critical above-the-fold data first. The page can become useful without
-    // waiting for the 3D engine, book list or graph payload.
     Promise.all([
       fetch(`${apiBase}/health`, { signal: controller.signal }),
       fetch(`${apiBase}/api/stats`, { signal: controller.signal }),
@@ -76,15 +76,17 @@ export default function HomePage() {
         if (err.name !== "AbortError") setError(err.message);
       });
 
-    // Non-critical homepage content is intentionally deferred until the browser
-    // has painted the initial shell and status metrics.
     const cancelDeferred = defer(() => {
       fetch(`${apiBase}/api/graph/verse/23702`, { signal: controller.signal })
         .then((response) => {
           if (!response.ok) throw new Error(`Graph API responded with ${response.status}`);
           return response.json() as Promise<VerseGraphData>;
         })
-        .then(setGraph)
+        .then((payload) => {
+          setGraph(payload);
+          setGraphFocus(payload.focus.reference);
+          setVisibleEdgeCount(payload.edges.length);
+        })
         .catch((err: Error) => {
           if (err.name !== "AbortError") console.error(err);
         });
@@ -144,13 +146,19 @@ export default function HomePage() {
           <div className="sectionHeading">
             <div>
               <p className="eyebrow">Erster echter 3D Knowledge Graph</p>
-              <h2>Matthäus 17:1 als interaktiver Fokus-Knoten</h2>
+              <h2>{graphFocus} als interaktiver Fokus-Knoten</h2>
             </div>
-            <span className="dataBadge">{graph?.edges.length ?? 0} verifizierte Kanten sichtbar</span>
+            <span className="dataBadge">{visibleEdgeCount} verifizierte Kanten sichtbar</span>
           </div>
 
           {graph ? (
-            <VerseGraph data={graph} />
+            <VerseGraph
+              data={graph}
+              onFocusChange={(reference, edgeCount) => {
+                setGraphFocus(reference);
+                setVisibleEdgeCount(edgeCount);
+              }}
+            />
           ) : (
             <div className="graphLoading">Graph-Daten werden nachgeladen …</div>
           )}
