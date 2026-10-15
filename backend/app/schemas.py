@@ -30,6 +30,8 @@ class StatsOut(BaseModel):
     books: int
     chapters: int
     verses: int
+    cross_references: int
     hebrew_books: int
     greek_books: int
     verse_structure_ready: bool
+    jw_source_ready: bool
