@@ -44,6 +44,7 @@ type VerseTextData = {
   storage_mode: string;
 };
 
+type JourneyPoint = { verse_id: number; reference: string };
 type ControlsHandle = { target: Vector3; update: () => void };
 
 function GraphNodeMesh({ node, selected, onSelect }: {
@@ -178,16 +179,29 @@ function CameraJourney({ target, journeyKey, controlsRef }: {
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
-export default function VerseGraph({ data }: { data: VerseGraphData }) {
-  // The prop is only the entry point. From here on the explorer owns its graph state.
-  // This prevents later parent re-renders from snapping the journey back to Mat 17:1.
+export default function VerseGraph({
+  data,
+  onFocusChange,
+}: {
+  data: VerseGraphData;
+  onFocusChange?: (reference: string, edgeCount: number) => void;
+}) {
   const [graphData, setGraphData] = useState<VerseGraphData>(() => data);
   const [selectedId, setSelectedId] = useState(() => `verse:${data.focus.id}`);
   const [verseText, setVerseText] = useState<VerseTextData | null>(null);
   const [textStatus, setTextStatus] = useState<"loading" | "ready" | "error">("loading");
   const [journeyStatus, setJourneyStatus] = useState<"idle" | "travelling" | "error">("idle");
+  const [history, setHistory] = useState<JourneyPoint[]>([
+    { verse_id: data.focus.id, reference: data.focus.reference },
+  ]);
+  const [historyIndex, setHistoryIndex] = useState(0);
   const controlsRef = useRef<ControlsHandle | null>(null);
   const journeyRequest = useRef(0);
+  const graphCache = useRef(new Map<number, VerseGraphData>([[data.focus.id, data]]));
+
+  useEffect(() => {
+    onFocusChange?.(graphData.focus.reference, graphData.edges.length);
+  }, [graphData, onFocusChange]);
 
   const positionedNodes = useMemo<PositionedNode[]>(() => {
     const focusNode = graphData.nodes.find((node) => node.verse_id === graphData.focus.id)
@@ -240,37 +254,72 @@ export default function VerseGraph({ data }: { data: VerseGraphData }) {
     (edge) => edge.source === canonicalFocusId || edge.target === canonicalFocusId,
   );
 
+  const loadGraph = async (verseId: number) => {
+    const cached = graphCache.current.get(verseId);
+    if (cached) return cached;
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8010";
+    const response = await fetch(`${apiBase}/api/graph/verse/${verseId}`);
+    if (!response.ok) throw new Error(`Graph API responded with ${response.status}`);
+    const payload = (await response.json()) as VerseGraphData;
+    graphCache.current.set(verseId, payload);
+    return payload;
+  };
+
+  const activateGraph = (payload: VerseGraphData) => {
+    setGraphData(payload);
+    setSelectedId(`verse:${payload.focus.id}`);
+    setJourneyStatus("idle");
+  };
+
   const travelToNode = async (next: PositionedNode) => {
     if (journeyStatus === "travelling") return;
     if (next.verse_id === graphData.focus.id) {
       setSelectedId(canonicalFocusId);
-      setJourneyStatus("idle");
       return;
     }
 
     setSelectedId(next.id);
     const requestId = ++journeyRequest.current;
     setJourneyStatus("travelling");
-    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8010";
 
     try {
-      const [response] = await Promise.all([
-        fetch(`${apiBase}/api/graph/verse/${next.verse_id}`),
-        wait(1450),
-      ]);
-      if (!response.ok) throw new Error(`Graph API responded with ${response.status}`);
-      const payload = (await response.json()) as VerseGraphData;
+      const [payload] = await Promise.all([loadGraph(next.verse_id), wait(1450)]);
       if (requestId !== journeyRequest.current) return;
 
-      setGraphData(payload);
-      setSelectedId(`verse:${payload.focus.id}`);
-      setJourneyStatus("idle");
+      graphCache.current.set(payload.focus.id, payload);
+      activateGraph(payload);
+      setHistory((current) => {
+        const base = current.slice(0, historyIndex + 1);
+        return [...base, { verse_id: payload.focus.id, reference: payload.focus.reference }];
+      });
+      setHistoryIndex((current) => current + 1);
     } catch {
       if (requestId !== journeyRequest.current) return;
-      // A failed expansion must never leave a neighbour pretending to be the focus.
       setSelectedId(canonicalFocusId);
       setJourneyStatus("error");
     }
+  };
+
+  const jumpToHistory = async (index: number) => {
+    if (journeyStatus === "travelling" || index === historyIndex) return;
+    const point = history[index];
+    if (!point) return;
+
+    const requestId = ++journeyRequest.current;
+    setJourneyStatus("travelling");
+    try {
+      const payload = await loadGraph(point.verse_id);
+      if (requestId !== journeyRequest.current) return;
+      activateGraph(payload);
+      setHistoryIndex(index);
+    } catch {
+      if (requestId !== journeyRequest.current) return;
+      setJourneyStatus("error");
+    }
+  };
+
+  const goBack = () => {
+    if (historyIndex > 0) void jumpToHistory(historyIndex - 1);
   };
 
   return (
@@ -356,13 +405,56 @@ export default function VerseGraph({ data }: { data: VerseGraphData }) {
         <h3>{selectedNode?.label ?? graphData.focus.reference}</h3>
 
         <div className="verseTextBlock">
-          <span className="verseTextLabel">Neue-Welt-Übersetzung · live von WOL</span>
+          <span className="verseTextLabel">Neue-Welt-Übersetzung · live von JW.org</span>
           {textStatus === "loading" ? <p className="verseTextState">Vers wird geladen …</p> : null}
-          {textStatus === "error" ? <p className="verseTextState error">Vers konnte gerade nicht von WOL geladen werden.</p> : null}
+          {textStatus === "error" ? <p className="verseTextState error">Vers konnte gerade nicht von JW.org geladen werden.</p> : null}
           {verseText ? <p className="verseText">{verseText.text}</p> : null}
           {verseText ? (
-            <a className="sourceLink" href={verseText.source_url} target="_blank" rel="noreferrer">Quelle auf WOL öffnen ↗</a>
+            <a className="sourceLink" href={verseText.source_url} target="_blank" rel="noreferrer">Quelle auf JW.org öffnen ↗</a>
           ) : null}
+        </div>
+
+        <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid rgba(116,155,220,.2)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <span className="verseTextLabel">Journey History</span>
+            <button
+              type="button"
+              onClick={goBack}
+              disabled={historyIndex === 0 || journeyStatus === "travelling"}
+              style={{
+                border: "1px solid rgba(120,170,255,.35)",
+                background: "rgba(9,20,40,.7)",
+                color: historyIndex === 0 ? "#52627c" : "#b9d8ff",
+                borderRadius: 999,
+                padding: "6px 10px",
+                cursor: historyIndex === 0 ? "default" : "pointer",
+              }}
+            >
+              ← Zurück
+            </button>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {history.map((point, index) => (
+              <button
+                key={`${point.verse_id}:${index}`}
+                type="button"
+                onClick={() => void jumpToHistory(index)}
+                disabled={journeyStatus === "travelling"}
+                title={`Zu ${point.reference} zurückspringen`}
+                style={{
+                  border: index === historyIndex ? "1px solid #79b6ff" : "1px solid rgba(120,170,255,.22)",
+                  background: index === historyIndex ? "rgba(49,107,181,.28)" : "rgba(8,15,29,.72)",
+                  color: index === historyIndex ? "#d8ebff" : "#8fa9ca",
+                  borderRadius: 999,
+                  padding: "6px 9px",
+                  cursor: journeyStatus === "travelling" ? "default" : "pointer",
+                  fontSize: 12,
+                }}
+              >
+                {index > 0 ? "→ " : ""}{point.reference}
+              </button>
+            ))}
+          </div>
         </div>
 
         <dl>
@@ -371,10 +463,10 @@ export default function VerseGraph({ data }: { data: VerseGraphData }) {
           <div><dt>Direkte sichtbare Kanten</dt><dd>{selectedEdges.length}</dd></div>
           <div><dt>Graph-Knoten</dt><dd>{graphData.nodes.length}</dd></div>
           <div><dt>Graph-Kanten</dt><dd>{graphData.edges.length}</dd></div>
-          <div><dt>Quelle</dt><dd>NWT Studienausgabe / WOL</dd></div>
+          <div><dt>Quelle</dt><dd>NWT Studienausgabe / JW.org</dd></div>
         </dl>
         <p className="inspectorNote">
-          Neue Knoten sind echte Querverweis-Nachbarn des jeweils aktiven Verses. Nach einer erfolgreichen Reise bleibt das Ziel dauerhaft Fokus; nur dessen Verbindungen senden den Lichtimpuls nach außen.
+          Die Journey History merkt sich deinen Pfad durch den Knowledge Graph. Mit „Zurück“ oder einem früheren Schritt kannst du jederzeit zu einem bereits besuchten Fokus zurückspringen.
         </p>
       </aside>
     </div>
