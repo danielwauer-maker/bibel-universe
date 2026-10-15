@@ -1,0 +1,139 @@
+.galaxyEngineWorkspace {
+  grid-template-columns: 178px minmax(0, 1fr) 340px;
+}
+
+.galaxyEngineStage {
+  background:
+    radial-gradient(circle at 52% 46%, rgba(87, 67, 196, .1), transparent 30%),
+    radial-gradient(circle at 34% 62%, rgba(255, 92, 142, .05), transparent 24%),
+    #02040a;
+}
+
+.galaxyEngineLoading {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: grid;
+  place-items: center;
+  background: rgba(2,4,10,.88);
+  color: #9fb3d3;
+  font-size: .78rem;
+  letter-spacing: .04em;
+}
+.galaxyEngineLoading.error { color: #ff9cae; }
+
+.galaxyVerseHover {
+  position: absolute;
+  z-index: 10;
+  pointer-events: none;
+  display: grid;
+  gap: 2px;
+  min-width: 104px;
+  padding: 7px 9px;
+  border: 1px solid rgba(132, 167, 235, .38);
+  border-radius: 9px;
+  background: rgba(5, 9, 19, .94);
+  box-shadow: 0 10px 28px rgba(0,0,0,.4), 0 0 18px rgba(94,116,255,.12);
+  backdrop-filter: blur(10px);
+  transform: translateZ(0);
+}
+.galaxyVerseHover strong { color: #eef5ff; font-size: .7rem; }
+.galaxyVerseHover span { color: #71839f; font-size: .56rem; }
+
+.galaxyEngineLegend div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 2px;
+  color: #7d8ba3;
+  font-size: .56rem;
+}
+.galaxyEngineLegend div span {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  box-shadow: 0 0 9px currentColor;
+}
+
+.galaxyVerseInspector {
+  height: 720px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(82,108,160,.45) transparent;
+}
+.galaxyVerseInspector::-webkit-scrollbar { width: 6px; }
+.galaxyVerseInspector::-webkit-scrollbar-thumb { border-radius: 999px; background: rgba(82,108,160,.36); }
+
+.verseSelectionCard {
+  background:
+    linear-gradient(145deg, rgba(18, 26, 47, .94), rgba(9,14,27,.9));
+  box-shadow: inset 0 1px rgba(255,255,255,.02), 0 0 32px rgba(80,91,255,.05);
+}
+.galaxyVerseText {
+  color: #eef2fb !important;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: .88rem !important;
+  line-height: 1.7 !important;
+}
+
+.relationshipOverview h4 { margin-bottom: 11px; }
+.relationshipGroup {
+  padding: 10px 0;
+  border-top: 1px solid #1a263e;
+}
+.relationshipGroup:first-of-type { border-top: 0; padding-top: 2px; }
+.relationshipGroupTitle {
+  display: grid;
+  grid-template-columns: 8px minmax(0,1fr) auto;
+  align-items: center;
+  gap: 7px;
+}
+.relationshipGroupTitle i {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  box-shadow: 0 0 10px currentColor;
+}
+.relationshipGroupTitle strong { color: #c8d4e8; font-size: .67rem; font-weight: 650; }
+.relationshipGroupTitle span {
+  min-width: 22px;
+  padding: 2px 6px;
+  border: 1px solid #26334d;
+  border-radius: 999px;
+  color: #7184a3;
+  font-size: .54rem;
+  text-align: center;
+}
+.relationshipChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+.relationshipChips button {
+  border: 1px solid #26344f;
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: #090f1c;
+  color: #9fb1cd;
+  font: inherit;
+  font-size: .59rem;
+  cursor: pointer;
+  transition: border-color .16s ease, color .16s ease, background .16s ease, box-shadow .16s ease;
+}
+.relationshipChips button:hover {
+  border-color: #5b74a8;
+  color: #eef5ff;
+  background: #0d1627;
+  box-shadow: 0 0 14px rgba(96,112,255,.12);
+}
+.emptyRelationship { margin: 5px 0 0 !important; color: #6e7f99 !important; }
+
+@media (max-width: 1100px) {
+  .galaxyEngineWorkspace { grid-template-columns: 150px minmax(0,1fr) 300px; }
+}
+
+@media (max-width: 900px) {
+  .galaxyEngineWorkspace { grid-template-columns: 1fr; }
+  .galaxyVerseInspector { height: auto; overflow: visible; }
+}

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import BigInteger, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -56,3 +56,75 @@ class BibleVerse(Base):
     text_content: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     chapter: Mapped[BibleChapter] = relationship(back_populates="verses")
+
+
+class GalaxyCoordinate(Base):
+    __tablename__ = "galaxy_coordinates"
+    __table_args__ = (
+        UniqueConstraint("verse_id", "model_name", name="uq_galaxy_coordinate_verse_model"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    verse_id: Mapped[int] = mapped_column(
+        ForeignKey("bible_verses.id", ondelete="CASCADE"), index=True
+    )
+    model_name: Mapped[str] = mapped_column(String(80), index=True)
+    x: Mapped[float] = mapped_column(Float)
+    y: Mapped[float] = mapped_column(Float)
+    z: Mapped[float] = mapped_column(Float)
+    source_kind: Mapped[str] = mapped_column(String(32), default="RELATIONSHIP_UMAP", index=True)
+
+
+class SourceCatalog(Base):
+    __tablename__ = "source_catalog"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(160))
+    publisher: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    source_kind: Mapped[str] = mapped_column(String(40), index=True)
+    base_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class CrossReference(Base):
+    __tablename__ = "cross_references"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_verse_id",
+            "target_start_verse_id",
+            "target_end_verse_id",
+            "source_catalog_id",
+            "native_category",
+            name="uq_cross_reference_identity",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    source_verse_id: Mapped[int] = mapped_column(
+        ForeignKey("bible_verses.id", ondelete="CASCADE"), index=True
+    )
+    target_start_verse_id: Mapped[int] = mapped_column(
+        ForeignKey("bible_verses.id", ondelete="CASCADE"), index=True
+    )
+    target_end_verse_id: Mapped[int | None] = mapped_column(
+        ForeignKey("bible_verses.id", ondelete="CASCADE"), nullable=True
+    )
+    source_catalog_id: Mapped[int] = mapped_column(
+        ForeignKey("source_catalog.id", ondelete="RESTRICT"), index=True
+    )
+
+    # Category exactly as exposed by the source, e.g. GENERAL or PARALLEL_ACCOUNT.
+    native_category: Mapped[str] = mapped_column(String(48), index=True)
+
+    # One of our 20 canonical relationship types. This stays nullable until a
+    # relationship has been explicitly classified.
+    relation_type: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+
+    # VERIFIED = directly sourced, CURATED = human-reviewed, INFERRED = algorithmic.
+    provenance_level: Mapped[str] = mapped_column(String(24), default="VERIFIED", index=True)
+    confidence: Mapped[float] = mapped_column(Float, default=1.0)
+
+    source_url: Mapped[str | None] = mapped_column(String(700), nullable=True)
+    source_anchor: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    evidence_note: Mapped[str | None] = mapped_column(Text, nullable=True)

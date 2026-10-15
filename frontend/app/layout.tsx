@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./galaxy-engine.css";
 
 export const metadata: Metadata = {
   title: "Bible Universe",

@@ -1,7 +1,10 @@
+import json
+from pathlib import Path
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from .models import BibleBook, BibleChapter
+from .models import BibleBook, BibleChapter, BibleVerse, SourceCatalog
 
 BOOKS = [
     (1, "1-mose", "1. Mose", "1Mo", "HEBREW", 50),
@@ -74,25 +77,36 @@ BOOKS = [
 
 EXPECTED_BOOK_COUNT = 66
 EXPECTED_CHAPTER_COUNT = 1189
+EXPECTED_VERSE_COUNT = 31102
+VERSE_COUNTS_PATH = Path(__file__).parent / "data" / "verse_counts.json"
 
 
-def seed_bible_skeleton(session: Session) -> None:
+def _load_verse_counts() -> list[list[int]]:
+    payload = json.loads(VERSE_COUNTS_PATH.read_text(encoding="utf-8"))
+    verse_counts = payload["ot"] + payload["nt"]
+    if len(verse_counts) != EXPECTED_BOOK_COUNT:
+        raise RuntimeError("Verse-count dataset does not contain 66 books")
+    return verse_counts
+
+
+def _seed_books_and_chapters(session: Session) -> None:
     existing_books = session.scalar(select(func.count(BibleBook.id))) or 0
     if existing_books:
         return
 
     chapter_global_order = 1
     for book_id, slug, name_de, abbreviation, scripture_part, chapter_count in BOOKS:
-        book = BibleBook(
-            id=book_id,
-            canonical_order=book_id,
-            slug=slug,
-            name_de=name_de,
-            abbreviation=abbreviation,
-            scripture_part=scripture_part,
-            chapter_count=chapter_count,
+        session.add(
+            BibleBook(
+                id=book_id,
+                canonical_order=book_id,
+                slug=slug,
+                name_de=name_de,
+                abbreviation=abbreviation,
+                scripture_part=scripture_part,
+                chapter_count=chapter_count,
+            )
         )
-        session.add(book)
 
         for chapter_number in range(1, chapter_count + 1):
             session.add(
@@ -109,3 +123,75 @@ def seed_bible_skeleton(session: Session) -> None:
         raise RuntimeError("Bible skeleton seed data failed canonical count validation")
 
     session.commit()
+
+
+def _seed_verses(session: Session) -> None:
+    existing_verses = session.scalar(select(func.count(BibleVerse.id))) or 0
+    if existing_verses:
+        return
+
+    verse_counts = _load_verse_counts()
+    chapter_lookup = {
+        (chapter.book_id, chapter.chapter_number): chapter.id
+        for chapter in session.scalars(select(BibleChapter)).all()
+    }
+
+    rows: list[BibleVerse] = []
+    verse_global_order = 1
+    for book_index, chapter_counts in enumerate(verse_counts, start=1):
+        abbreviation = BOOKS[book_index - 1][3]
+        expected_chapters = BOOKS[book_index - 1][5]
+        if len(chapter_counts) != expected_chapters:
+            raise RuntimeError(f"Verse-count chapter mismatch for book {book_index}")
+
+        for chapter_number, verse_count in enumerate(chapter_counts, start=1):
+            chapter_id = chapter_lookup[(book_index, chapter_number)]
+            for verse_number in range(1, verse_count + 1):
+                rows.append(
+                    BibleVerse(
+                        id=verse_global_order,
+                        chapter_id=chapter_id,
+                        verse_number=verse_number,
+                        source_reference=f"{abbreviation} {chapter_number}:{verse_number}",
+                        text_content=None,
+                    )
+                )
+                verse_global_order += 1
+
+    if verse_global_order - 1 != EXPECTED_VERSE_COUNT:
+        raise RuntimeError(
+            f"Verse skeleton count mismatch: {verse_global_order - 1} != {EXPECTED_VERSE_COUNT}"
+        )
+
+    session.bulk_save_objects(rows)
+    session.commit()
+
+
+def _seed_sources(session: Session) -> None:
+    existing_source = session.scalar(
+        select(SourceCatalog).where(SourceCatalog.code == "JW_NWT_STUDY_DE")
+    )
+    if existing_source:
+        return
+
+    session.add(
+        SourceCatalog(
+            id=1,
+            code="JW_NWT_STUDY_DE",
+            name="Neue-Welt-Übersetzung (Studienausgabe) – Deutsch",
+            publisher="Watch Tower Bible and Tract Society of Pennsylvania",
+            source_kind="BIBLE_STUDY_EDITION",
+            base_url="https://www.jw.org/de/bibliothek/bibel/studienbibel/buecher/",
+            notes=(
+                "Primary verified source for Bible Universe cross-reference metadata. "
+                "S2 stores verse coordinates, links and relationship metadata, not the full NWT text."
+            ),
+        )
+    )
+    session.commit()
+
+
+def seed_bible_skeleton(session: Session) -> None:
+    _seed_books_and_chapters(session)
+    _seed_verses(session)
+    _seed_sources(session)
