@@ -3,12 +3,25 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from .db import Base, SessionLocal, engine
-from .models import BibleBook, BibleChapter, BibleVerse
-from .schemas import BookDetailOut, BookOut, ChapterOut, StatsOut
+from .models import (
+    BibleBook,
+    BibleChapter,
+    BibleVerse,
+    CrossReference,
+    SourceCatalog,
+)
+from .schemas import (
+    BookDetailOut,
+    BookOut,
+    ChapterOut,
+    CrossReferenceOut,
+    StatsOut,
+    VerseOut,
+)
 from .seed_data import seed_bible_skeleton
 
 
@@ -22,7 +35,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="Bible Universe API",
-    version="0.2.0",
+    version="0.3.0",
     description="Local-first API for the Scripture Knowledge Graph.",
     lifespan=lifespan,
 )
@@ -53,8 +66,8 @@ def health() -> dict[str, str]:
 def root() -> dict[str, str]:
     return {
         "name": "Bible Universe API",
-        "stage": "S1 Bible Skeleton",
-        "message": "Canonical Bible structure is available through /api endpoints.",
+        "stage": "S2 NWT Cross-Reference Foundation",
+        "message": "Verse coordinates and verified-source graph structures are ready.",
     }
 
 
@@ -63,20 +76,31 @@ def stats(db: Session = Depends(get_db)) -> StatsOut:
     book_count = db.scalar(select(func.count(BibleBook.id))) or 0
     chapter_count = db.scalar(select(func.count(BibleChapter.id))) or 0
     verse_count = db.scalar(select(func.count(BibleVerse.id))) or 0
+    cross_reference_count = db.scalar(select(func.count(CrossReference.id))) or 0
     hebrew_count = db.scalar(
         select(func.count(BibleBook.id)).where(BibleBook.scripture_part == "HEBREW")
     ) or 0
     greek_count = db.scalar(
         select(func.count(BibleBook.id)).where(BibleBook.scripture_part == "GREEK")
     ) or 0
+    jw_source_ready = (
+        db.scalar(
+            select(func.count(SourceCatalog.id)).where(
+                SourceCatalog.code == "JW_NWT_STUDY_DE"
+            )
+        )
+        or 0
+    ) > 0
 
     return StatsOut(
         books=book_count,
         chapters=chapter_count,
         verses=verse_count,
+        cross_references=cross_reference_count,
         hebrew_books=hebrew_count,
         greek_books=greek_count,
-        verse_structure_ready=True,
+        verse_structure_ready=verse_count == 31102,
+        jw_source_ready=jw_source_ready,
     )
 
 
@@ -128,3 +152,58 @@ def get_chapter(book_id: int, chapter_number: int, db: Session = Depends(get_db)
     if chapter is None:
         raise HTTPException(status_code=404, detail="Chapter not found")
     return chapter
+
+
+@app.get(
+    "/api/books/{book_id}/chapters/{chapter_number}/verses",
+    response_model=list[VerseOut],
+)
+def list_chapter_verses(
+    book_id: int,
+    chapter_number: int,
+    db: Session = Depends(get_db),
+) -> list[BibleVerse]:
+    chapter = db.scalar(
+        select(BibleChapter).where(
+            BibleChapter.book_id == book_id,
+            BibleChapter.chapter_number == chapter_number,
+        )
+    )
+    if chapter is None:
+        raise HTTPException(status_code=404, detail="Chapter not found")
+
+    statement = (
+        select(BibleVerse)
+        .where(BibleVerse.chapter_id == chapter.id)
+        .order_by(BibleVerse.verse_number)
+    )
+    return list(db.scalars(statement).all())
+
+
+@app.get("/api/verses/{verse_id}", response_model=VerseOut)
+def get_verse(verse_id: int, db: Session = Depends(get_db)) -> BibleVerse:
+    verse = db.get(BibleVerse, verse_id)
+    if verse is None:
+        raise HTTPException(status_code=404, detail="Verse not found")
+    return verse
+
+
+@app.get("/api/cross-references", response_model=list[CrossReferenceOut])
+def list_cross_references(
+    verse_id: int | None = None,
+    native_category: str | None = None,
+    limit: int = Query(default=100, ge=1, le=1000),
+    db: Session = Depends(get_db),
+) -> list[CrossReference]:
+    statement = select(CrossReference).order_by(CrossReference.id).limit(limit)
+    if verse_id is not None:
+        statement = statement.where(
+            or_(
+                CrossReference.source_verse_id == verse_id,
+                CrossReference.target_start_verse_id == verse_id,
+                CrossReference.target_end_verse_id == verse_id,
+            )
+        )
+    if native_category:
+        statement = statement.where(CrossReference.native_category == native_category)
+    return list(db.scalars(statement).all())
