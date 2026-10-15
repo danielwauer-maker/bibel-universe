@@ -18,10 +18,13 @@ type GraphEdge = {
   source: string;
   target: string;
   cross_reference_id: number;
+  cross_reference_ids?: number[];
   native_category: string;
   relation_type: string | null;
   provenance_level: string;
   confidence: number;
+  evidence_count?: number;
+  bidirectional?: boolean;
 };
 
 export type VerseGraphData = {
@@ -205,32 +208,44 @@ function CameraJourney({
   return null;
 }
 
+const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
 export default function VerseGraph({ data }: { data: VerseGraphData }) {
+  const [graphData, setGraphData] = useState<VerseGraphData>(data);
   const [selectedId, setSelectedId] = useState(`verse:${data.focus.id}`);
   const [verseText, setVerseText] = useState<VerseTextData | null>(null);
   const [textStatus, setTextStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [journeyStatus, setJourneyStatus] = useState<"idle" | "travelling" | "error">("idle");
   const controlsRef = useRef<ControlsHandle | null>(null);
+  const journeyRequest = useRef(0);
+
+  useEffect(() => {
+    setGraphData(data);
+    setSelectedId(`verse:${data.focus.id}`);
+  }, [data]);
 
   const positionedNodes = useMemo<PositionedNode[]>(() => {
-    const focusNode = data.nodes.find((node) => node.role === "focus");
-    const connected = data.nodes.filter((node) => node.role !== "focus");
+    const focusNode = graphData.nodes.find((node) => node.role === "focus");
+    const connected = graphData.nodes.filter((node) => node.role !== "focus");
     const result: PositionedNode[] = [];
 
     if (focusNode) result.push({ ...focusNode, position: [0, 0, 0] });
 
-    const radius = connected.length <= 4 ? 4.2 : 5.2;
+    const radius = connected.length <= 4 ? 4.2 : connected.length <= 10 ? 5.2 : 6.2;
     connected.forEach((node, index) => {
       const angle = (index / Math.max(connected.length, 1)) * Math.PI * 2;
-      const y = Math.sin(angle * 1.7) * 1.5;
-      const z = Math.cos(angle * 0.8) * 1.25;
+      const layer = index % 3;
+      const y = Math.sin(angle * 1.7) * (1.35 + layer * 0.55);
+      const z = Math.cos(angle * 0.8) * (1.15 + layer * 0.38);
+      const localRadius = radius + (layer - 1) * 0.75;
       result.push({
         ...node,
-        position: [Math.cos(angle) * radius, y, Math.sin(angle) * radius + z],
+        position: [Math.cos(angle) * localRadius, y, Math.sin(angle) * localRadius + z],
       });
     });
 
     return result;
-  }, [data]);
+  }, [graphData]);
 
   const nodeMap = useMemo(
     () => new Map(positionedNodes.map((node) => [node.id, node])),
@@ -261,41 +276,65 @@ export default function VerseGraph({ data }: { data: VerseGraphData }) {
     return () => controller.abort();
   }, [selectedNode?.verse_id]);
 
-  const selectedEdges = data.edges.filter(
+  const selectedEdges = graphData.edges.filter(
     (edge) => edge.source === selectedId || edge.target === selectedId,
   );
+
+  const travelToNode = async (next: PositionedNode) => {
+    setSelectedId(next.id);
+
+    if (next.verse_id === graphData.focus.id || journeyStatus === "travelling") return;
+
+    const requestId = ++journeyRequest.current;
+    setJourneyStatus("travelling");
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8010";
+
+    try {
+      const [response] = await Promise.all([
+        fetch(`${apiBase}/api/graph/verse/${next.verse_id}`),
+        wait(1450),
+      ]);
+      if (!response.ok) throw new Error(`Graph API responded with ${response.status}`);
+      const payload = (await response.json()) as VerseGraphData;
+      if (requestId !== journeyRequest.current) return;
+
+      setGraphData(payload);
+      setSelectedId(`verse:${payload.focus.id}`);
+      setJourneyStatus("idle");
+    } catch {
+      if (requestId !== journeyRequest.current) return;
+      setJourneyStatus("error");
+    }
+  };
 
   return (
     <div className="graphExperience">
       <div className="graphCanvasWrap">
         <Canvas camera={{ position: [0, 2.3, 10.5], fov: 48 }} dpr={[1, 1.75]}>
           <color attach="background" args={["#03050b"]} />
-          <fog attach="fog" args={["#03050b", 13, 30]} />
+          <fog attach="fog" args={["#03050b", 13, 32]} />
           <ambientLight intensity={0.28} />
           <directionalLight position={[6, 8, 8]} intensity={1.05} color="#c8d8ff" />
-          <Stars radius={42} depth={22} count={1600} factor={2.15} saturation={0.55} fade speed={0.2} />
+          <Stars radius={45} depth={24} count={1600} factor={2.15} saturation={0.55} fade speed={0.2} />
 
-          {data.edges.map((edge, index) => {
+          {graphData.edges.map((edge, index) => {
             const source = nodeMap.get(edge.source);
             const targetNode = nodeMap.get(edge.target);
             if (!source || !targetNode) return null;
             const active = edge.source === selectedId || edge.target === selectedId;
-
-            // The stored edge keeps its canonical/source-data direction. The animated
-            // journey pulse is a UI layer: once a connected node is selected, the pulse
-            // must visually radiate out from that active node toward its neighbour.
             const selectedIsTarget = active && edge.target === selectedId;
             const pulseSource = selectedIsTarget ? targetNode.position : source.position;
             const pulseTarget = selectedIsTarget ? source.position : targetNode.position;
+            const strongerEvidence = (edge.evidence_count ?? 1) > 1;
 
             return (
               <group key={edge.id}>
                 <Line
                   points={[source.position, targetNode.position]}
-                  color={active ? "#9bc5ff" : "#50638f"}
-                  lineWidth={active ? 2.35 : 1.1}
+                  color={active ? "#9bc5ff" : strongerEvidence ? "#667fc0" : "#50638f"}
+                  lineWidth={active ? 2.35 : strongerEvidence ? 1.45 : 1.1}
                   transparent
-                  opacity={active ? 0.94 : 0.42}
+                  opacity={active ? 0.94 : strongerEvidence ? 0.58 : 0.42}
                 />
                 <AnimatedConnection
                   source={pulseSource}
@@ -312,14 +351,14 @@ export default function VerseGraph({ data }: { data: VerseGraphData }) {
               key={node.id}
               node={node}
               selected={node.id === selectedId}
-              onSelect={(next) => setSelectedId(next.id)}
+              onSelect={travelToNode}
             />
           ))}
 
           {selectedNode ? (
             <CameraJourney
               target={selectedNode.position}
-              journeyKey={selectedNode.id}
+              journeyKey={`${graphData.focus.id}:${selectedNode.id}`}
               controlsRef={controlsRef}
             />
           ) : null}
@@ -330,20 +369,24 @@ export default function VerseGraph({ data }: { data: VerseGraphData }) {
             enableDamping
             dampingFactor={0.075}
             minDistance={3.8}
-            maxDistance={18}
+            maxDistance={22}
             autoRotate={false}
           />
         </Canvas>
 
         <div className="graphJourneyBadge">
-          {selectedNode?.id === `verse:${data.focus.id}` ? "Startpunkt" : `Reise zu ${selectedNode?.label}`}
+          {journeyStatus === "travelling"
+            ? `Unterwegs zu ${selectedNode?.label ?? "Ziel"} …`
+            : journeyStatus === "error"
+              ? "Neue Verbindungen konnten nicht geladen werden"
+              : `Fokus: ${graphData.focus.reference}`}
         </div>
-        <div className="graphHint">Knoten anklicken · Kamera gleitet zum Ziel · Ziehen zum Drehen · Mausrad zum Zoomen</div>
+        <div className="graphHint">Knoten anklicken · Kamera reist zum Ziel · Ziel wird neuer Fokus · neue Verbindungen werden geladen</div>
       </div>
 
       <aside className="graphInspector">
         <p className="eyebrow">Live Graph Inspector</p>
-        <h3>{selectedNode?.label ?? data.focus.reference}</h3>
+        <h3>{selectedNode?.label ?? graphData.focus.reference}</h3>
 
         <div className="verseTextBlock">
           <span className="verseTextLabel">Neue-Welt-Übersetzung · live von WOL</span>
@@ -360,13 +403,15 @@ export default function VerseGraph({ data }: { data: VerseGraphData }) {
         </div>
 
         <dl>
-          <div><dt>Vers-ID</dt><dd>{selectedNode?.verse_id ?? data.focus.id}</dd></div>
-          <div><dt>Rolle</dt><dd>{selectedNode?.role === "focus" ? "Start-/Fokus-Knoten" : "Verbundener Knoten"}</dd></div>
-          <div><dt>Direkte Kanten</dt><dd>{selectedEdges.length}</dd></div>
+          <div><dt>Vers-ID</dt><dd>{selectedNode?.verse_id ?? graphData.focus.id}</dd></div>
+          <div><dt>Aktueller Fokus</dt><dd>{graphData.focus.reference}</dd></div>
+          <div><dt>Direkte sichtbare Kanten</dt><dd>{selectedEdges.length}</dd></div>
+          <div><dt>Graph-Knoten</dt><dd>{graphData.nodes.length}</dd></div>
+          <div><dt>Graph-Kanten</dt><dd>{graphData.edges.length}</dd></div>
           <div><dt>Quelle</dt><dd>NWT Studienausgabe / WOL</dd></div>
         </dl>
         <p className="inspectorNote">
-          Die Verbindungen zeigen jetzt einen laufenden Lichtimpuls. Ein Klick auf einen Knoten startet die Kamerafahrt und lädt den Bibeltext des Zielpunkts live in den Inspector.
+          Beim Klick auf einen verbundenen Vers fährt die Kamera zuerst zum Ziel. Danach wird dieser Vers zum neuen Fokus und sein eigener lokaler Knowledge Graph wird aus PostgreSQL geladen.
         </p>
       </aside>
     </div>
