@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import {
   Color,
+  Group,
   InstancedBufferAttribute,
   InstancedMesh,
   MeshBasicMaterial,
@@ -43,8 +44,7 @@ export default function InstancedVerseField({
   onHover,
   onClick,
 }: Props) {
-  const groupRef = useRef<THREE.Group>(null);
-  const meshRef = useRef<InstancedMesh | null>(null);
+  const groupRef = useRef<Group>(null);
   const lastHover = useRef<number | null>(null);
   const frameCounter = useRef(0);
   const { camera, gl } = useThree();
@@ -63,7 +63,6 @@ export default function InstancedVerseField({
     const next = new InstancedMesh(geometry, material, data.count);
     next.frustumCulled = false;
     next.instanceColor = new InstancedBufferAttribute(new Float32Array(data.count * 3), 3);
-    meshRef.current = next;
     return next;
   }, [data.count]);
 
