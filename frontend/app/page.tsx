@@ -11,9 +11,11 @@ type Stats = {
   books: number;
   chapters: number;
   verses: number;
+  cross_references: number;
   hebrew_books: number;
   greek_books: number;
   verse_structure_ready: boolean;
+  jw_source_ready: boolean;
 };
 
 type Book = {
@@ -60,25 +62,27 @@ export default function HomePage() {
       .catch((err: Error) => setError(err.message));
   }, []);
 
+  const ready = health && stats?.verse_structure_ready && stats?.jw_source_ready;
+
   return (
     <main className="shell">
       <section className="hero">
-        <p className="eyebrow">S1 · Bible Skeleton</p>
+        <p className="eyebrow">S2 · NWT Cross-Reference Foundation</p>
         <h1>Bible Universe</h1>
         <p className="lead">
-          Das kanonische Grundgerüst für Galaxy View, Knowledge Graph und die spätere Reise durch echte biblische Verbindungen.
+          31.102 adressierbare Vers-Knoten als Basis für echte, quellenbelegte Verbindungen aus der Neue-Welt-Übersetzung (Studienausgabe).
         </p>
 
         <div className="statusCard">
-          <span className={`dot ${health && stats ? "ok" : error ? "error" : "pending"}`} />
+          <span className={`dot ${ready ? "ok" : error ? "error" : "pending"}`} />
           <div>
             <strong>Lokaler Stack</strong>
             <p>
-              {health && stats
-                ? `${health.service}: ${health.status} · Bible Skeleton geladen`
+              {ready
+                ? `${health?.service}: ${health?.status} · Versstruktur + JW.org-Quelle bereit`
                 : error
                   ? `Nicht erreichbar: ${error}`
-                  : "API und Bibelstruktur werden geprüft …"}
+                  : "Versstruktur und Quellenkatalog werden geprüft …"}
             </p>
           </div>
         </div>
@@ -91,6 +95,14 @@ export default function HomePage() {
           <div className="metric">
             <strong>{stats?.chapters?.toLocaleString("de-DE") ?? "–"}</strong>
             <span>Kapitel</span>
+          </div>
+          <div className="metric accentMetric">
+            <strong>{stats?.verses?.toLocaleString("de-DE") ?? "–"}</strong>
+            <span>Vers-Knoten</span>
+          </div>
+          <div className="metric">
+            <strong>{stats?.cross_references?.toLocaleString("de-DE") ?? "–"}</strong>
+            <span>importierte Querverweise</span>
           </div>
           <div className="metric">
             <strong>{stats?.hebrew_books ?? "–"}</strong>
@@ -124,9 +136,18 @@ export default function HomePage() {
           <div className="sectionHeading">
             <div>
               <p className="eyebrow">Live aus PostgreSQL</p>
-              <h2>66 Bücher als erstes echtes Graph-Fundament</h2>
+              <h2>66 Bücher · 1.189 Kapitel · 31.102 Vers-Knoten</h2>
             </div>
-            <span className="dataBadge">{stats?.chapters ?? "–"} Kapitel geladen</span>
+            <span className="dataBadge">
+              {stats?.jw_source_ready ? "JW.org Quelle registriert" : "Quelle wird vorbereitet"}
+            </span>
+          </div>
+
+          <div className="sourceNote">
+            <strong>S2 Datenprinzip</strong>
+            <p>
+              Wir speichern zunächst Verskoordinaten, Querverweis-Beziehungen, Kategorien und Quellen-URLs. Der vollständige NWT-Text wird in dieser Phase nicht in unser Repository kopiert.
+            </p>
           </div>
 
           <div className="bookGrid">
