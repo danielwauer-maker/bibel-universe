@@ -1,6 +1,6 @@
 "use client";
 
-import { OrbitControls, Sparkles, Stars } from "@react-three/drei";
+import { OrbitControls, Sparkles, Stars, Text } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { useMemo, useState } from "react";
 
@@ -98,6 +98,8 @@ const REGIONS: GalaxyRegion[] = [
 
 function GalaxyCloud({ region, selected }: { region: GalaxyRegion; selected: boolean }) {
   const count = selected ? 430 : 280;
+  const labelOffset = region.id === "congregation" ? -1.35 : 1.55;
+
   return (
     <group position={region.position}>
       <Sparkles
@@ -114,6 +116,21 @@ function GalaxyCloud({ region, selected }: { region: GalaxyRegion; selected: boo
         <meshBasicMaterial color={region.glow} transparent opacity={0.95} />
       </mesh>
       <pointLight color={region.color} intensity={selected ? 3.2 : 1.55} distance={5.8} />
+
+      <Text
+        position={[0, labelOffset, 0.35]}
+        fontSize={selected ? 0.28 : 0.23}
+        color={region.glow}
+        anchorX="center"
+        anchorY="middle"
+        textAlign="center"
+        outlineWidth={0.012}
+        outlineColor="#03050b"
+        fillOpacity={selected ? 1 : 0.92}
+        maxWidth={4.6}
+      >
+        {region.label.toUpperCase()}
+      </Text>
     </group>
   );
 }
@@ -153,17 +170,6 @@ export default function GalaxyView({ stats }: { stats: GalaxyStats | null }) {
           ))}
           <OrbitControls enableDamping dampingFactor={0.065} minDistance={7} maxDistance={24} autoRotate autoRotateSpeed={0.08} />
         </Canvas>
-
-        <div className="galaxyRegionLabels" aria-hidden="true">
-          <span className="wisdom">WEISHEIT & POESIE</span>
-          <span className="god">GOTT & GÖTTLICHKEIT</span>
-          <span className="law">GESETZ & BUND</span>
-          <span className="history">GESCHICHTE & KÖNIGREICHE</span>
-          <span className="jesus">JESUS & EVANGELIEN</span>
-          <span className="prophecy">PROPHEZEIUNG & GERICHT</span>
-          <span className="faith">GLAUBE & PRAXIS</span>
-          <span className="congregation">VERSAMMLUNG & MISSION</span>
-        </div>
 
         <div className="galaxyLegend">
           <strong>Semantische Regionen</strong>
