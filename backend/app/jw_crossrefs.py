@@ -40,9 +40,24 @@ EXTRA_ALIASES = {
     "2jo": "2Jo", "3jo": "3Jo", "jud": "Jud", "off": "Off", "offb": "Off",
 }
 
-# JW.org's public Study Bible chapter pages are client-heavy. The official WOL mirror exposes
-# the same Study Bible cross-reference tables in server-rendered HTML, which is much more stable
-# for a local research importer. These aliases let us derive the official WOL URL from a JW.org URL.
+FULL_BOOK_TO_ABBR = {
+    "1 mose": "1Mo", "2 mose": "2Mo", "3 mose": "3Mo", "4 mose": "4Mo", "5 mose": "5Mo",
+    "josua": "Jos", "richter": "Ri", "ruth": "Ru", "1 samuel": "1Sa", "2 samuel": "2Sa",
+    "1 könige": "1Kö", "2 könige": "2Kö", "1 chronika": "1Ch", "2 chronika": "2Ch",
+    "esra": "Esr", "nehemia": "Ne", "esther": "Est", "hiob": "Hi", "psalm": "Ps",
+    "psalmen": "Ps", "sprüche": "Spr", "prediger": "Pr", "hohes lied": "Hoh",
+    "jesaja": "Jes", "jeremia": "Jer", "klagelieder": "Klg", "hesekiel": "Hes", "daniel": "Da",
+    "hosea": "Hos", "joel": "Joel", "amos": "Am", "obadja": "Ob", "jona": "Jon", "micha": "Mi",
+    "nahum": "Nah", "habakuk": "Hab", "zephanja": "Ze", "haggai": "Hag", "sacharja": "Sach",
+    "maleachi": "Mal", "matthäus": "Mat", "markus": "Mar", "lukas": "Luk", "johannes": "Joh",
+    "apostelgeschichte": "Apg", "römer": "Röm", "1 korinther": "1Ko", "2 korinther": "2Ko",
+    "galater": "Gal", "epheser": "Eph", "philipper": "Php", "kolosser": "Kol",
+    "1 thessalonicher": "1Th", "2 thessalonicher": "2Th", "1 timotheus": "1Ti", "2 timotheus": "2Ti",
+    "titus": "Tit", "philemon": "Phm", "hebräer": "Heb", "jakobus": "Jak", "1 petrus": "1Pe",
+    "2 petrus": "2Pe", "1 johannes": "1Jo", "2 johannes": "2Jo", "3 johannes": "3Jo",
+    "judas": "Jud", "offenbarung": "Off",
+}
+
 JW_BOOK_SLUG_TO_NUMBER = {
     "1-mose": 1, "2-mose": 2, "3-mose": 3, "4-mose": 4, "5-mose": 5,
     "josua": 6, "richter": 7, "ruth": 8, "1-samuel": 9, "2-samuel": 10,
@@ -60,14 +75,14 @@ JW_BOOK_SLUG_TO_NUMBER = {
     "3-johannes": 64, "judas": 65, "offenbarung": 66,
 }
 
-SOURCE_LINE_RE = re.compile(
-    r"^(?P<book>[1-3]?[A-Za-zÄÖÜäöüß.]+)\s+(?P<chapter>\d+):(?P<verse>\d+)\s+(?P<targets>.+)$"
-)
 TARGET_WITH_BOOK_RE = re.compile(
     r"^(?P<book>[1-3]?[A-Za-zÄÖÜäöüß.]+)\s+(?P<chapter>\d+):(?P<verses>.+)$"
 )
 TARGET_SAME_BOOK_RE = re.compile(r"^(?P<chapter>\d+):(?P<verses>.+)$")
 VERSE_RANGE_RE = re.compile(r"^(?P<start>\d+)(?:[-–](?P<end>\d+))?$")
+VERSE_HEADING_RE = re.compile(
+    r"^(?P<book>.+?)\s+(?P<chapter>\d+):(?P<verse>\d+)$"
+)
 
 
 @dataclass(frozen=True)
@@ -88,14 +103,14 @@ class ParsedCrossReference:
 
 
 def _normalize_token(value: str) -> str:
-    return value.strip().replace(".", "").lower()
+    return " ".join(value.replace(".", "").strip().lower().split())
 
 
 def _ascii_slug(value: str) -> str:
     value = unquote(value).strip().lower().replace("_", "-")
     value = unicodedata.normalize("NFKD", value)
     value = "".join(ch for ch in value if not unicodedata.combining(ch))
-    value = value.replace("ä", "a").replace("ö", "o").replace("ü", "u").replace("ß", "ss")
+    value = value.replace("ß", "ss")
     return re.sub(r"[^a-z0-9-]+", "", value)
 
 
@@ -121,8 +136,8 @@ def parse_target_list(value: str) -> list[ParsedTarget]:
     results: list[ParsedTarget] = []
     current_book: str | None = None
 
-    for raw_segment in value.split(";"):
-        segment = raw_segment.strip().lstrip("+")
+    for raw_segment in value.replace("\u00a0", " ").split(";"):
+        segment = raw_segment.strip().lstrip("+").strip()
         if not segment:
             continue
 
@@ -141,85 +156,129 @@ def parse_target_list(value: str) -> list[ParsedTarget]:
     return results
 
 
-def _heading_level(tag: Tag) -> int:
-    return int(tag.name[1])
-
-
-def _section_text(heading: Tag) -> list[str]:
-    level = _heading_level(heading)
-    lines: list[str] = []
-    sibling = heading.next_sibling
-    while sibling is not None:
-        if isinstance(sibling, Tag) and re.fullmatch(r"h[1-6]", sibling.name or ""):
-            if _heading_level(sibling) <= level:
-                break
-        if isinstance(sibling, Tag):
-            text = sibling.get_text("\n", strip=True)
-            if text:
-                lines.extend(line.strip() for line in text.splitlines() if line.strip())
-        sibling = sibling.next_sibling
-    return lines
-
-
-def _parse_section_lines(lines: list[str], native_category: str, parsed: list[ParsedCrossReference], seen: set) -> None:
-    for line in lines:
-        # WOL occasionally renders a reference marker letter between source and target (e.g. "Mat. 17:5 a ...").
-        line = re.sub(r"^(\S+\s+\d+:\d+)\s+[a-z]\s+", r"\1 ", line, flags=re.IGNORECASE)
-        source_match = SOURCE_LINE_RE.match(line)
-        if not source_match:
+def _append_crossrefs(
+    parsed: list[ParsedCrossReference],
+    seen: set[tuple[str, int, int, str, str, int, int, int]],
+    source_book: str,
+    source_chapter: int,
+    source_verse: int,
+    native_category: str,
+    target_text: str,
+) -> None:
+    for target in parse_target_list(target_text):
+        key = (
+            source_book,
+            source_chapter,
+            source_verse,
+            native_category,
+            target.book_abbreviation,
+            target.chapter,
+            target.verse_start,
+            target.verse_end,
+        )
+        if key in seen:
             continue
-        source_book = _canonical_abbreviation(source_match.group("book"))
-        source_chapter = int(source_match.group("chapter"))
-        source_verse = int(source_match.group("verse"))
-        for target in parse_target_list(source_match.group("targets")):
-            key = (source_book, source_chapter, source_verse, native_category,
-                   target.book_abbreviation, target.chapter, target.verse_start, target.verse_end)
-            if key in seen:
-                continue
-            seen.add(key)
-            parsed.append(ParsedCrossReference(source_book, source_chapter, source_verse, native_category, target))
+        seen.add(key)
+        parsed.append(
+            ParsedCrossReference(
+                source_book_abbreviation=source_book,
+                source_chapter=source_chapter,
+                source_verse=source_verse,
+                native_category=native_category,
+                target=target,
+            )
+        )
 
 
-def parse_cross_references(html: str) -> list[ParsedCrossReference]:
-    soup = BeautifulSoup(html, "html.parser")
+def _parse_jw_category_view(soup: BeautifulSoup) -> list[ParsedCrossReference]:
+    """Parse the categorized Marginal References view when category labels are present."""
     parsed: list[ParsedCrossReference] = []
     seen: set[tuple[str, int, int, str, str, int, int, int]] = set()
 
-    for heading in soup.find_all(re.compile(r"^h[1-6]$")):
-        label = _normalize_token(heading.get_text(" ", strip=True))
-        native_category = CATEGORY_LABELS.get(label)
-        if native_category:
-            _parse_section_lines(_section_text(heading), native_category, parsed, seen)
+    current_category: str | None = None
+    current_source: tuple[str, int, int] | None = None
 
-    # Fallback for server-rendered pages where category headings and rows are not siblings.
-    if not parsed:
-        strings = [s.strip() for s in soup.stripped_strings if s.strip()]
-        current_category: str | None = None
-        collected: list[str] = []
-        for text in strings:
-            category = CATEGORY_LABELS.get(_normalize_token(text))
-            if category:
-                if current_category and collected:
-                    _parse_section_lines(collected, current_category, parsed, seen)
-                current_category = category
-                collected = []
-                continue
-            if current_category:
-                if _normalize_token(text) in {"fußnoten", "studienanmerkungen", "medien"}:
-                    _parse_section_lines(collected, current_category, parsed, seen)
-                    current_category = None
-                    collected = []
-                else:
-                    collected.append(text)
-        if current_category and collected:
-            _parse_section_lines(collected, current_category, parsed, seen)
+    for element in soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6", "li", "p", "div"]):
+        text = element.get_text(" ", strip=True)
+        if not text:
+            continue
+
+        category = CATEGORY_LABELS.get(_normalize_token(text))
+        if category:
+            current_category = category
+            continue
+
+        source_match = VERSE_HEADING_RE.match(text)
+        if source_match:
+            source_book = FULL_BOOK_TO_ABBR.get(_normalize_token(source_match.group("book")))
+            if source_book:
+                current_source = (
+                    source_book,
+                    int(source_match.group("chapter")),
+                    int(source_match.group("verse")),
+                )
+            continue
+
+        if current_category and current_source and text.startswith("+"):
+            _append_crossrefs(parsed, seen, *current_source, current_category, text)
 
     return parsed
 
 
+def _parse_wol_treasure_view(soup: BeautifulSoup) -> list[ParsedCrossReference]:
+    """Parse WOL's server-rendered per-verse 'Querverweise' blocks.
+
+    WOL reliably exposes the verified cross-reference pairs, but it does not expose the
+    chapter-level three-way category assignment (Parallelbericht/Zitat/Allgemein) in this view.
+    We therefore store these rows as UNCLASSIFIED rather than inventing a category.
+    """
+    parsed: list[ParsedCrossReference] = []
+    seen: set[tuple[str, int, int, str, str, int, int, int]] = set()
+
+    current_source: tuple[str, int, int] | None = None
+    in_crossrefs = False
+
+    for element in soup.find_all(["h3", "h4", "li"]):
+        if element.name == "h3":
+            in_crossrefs = False
+            heading = element.get_text(" ", strip=True)
+            match = VERSE_HEADING_RE.match(heading)
+            current_source = None
+            if match:
+                source_book = FULL_BOOK_TO_ABBR.get(_normalize_token(match.group("book")))
+                if source_book:
+                    current_source = (
+                        source_book,
+                        int(match.group("chapter")),
+                        int(match.group("verse")),
+                    )
+            continue
+
+        if element.name == "h4":
+            in_crossrefs = _normalize_token(element.get_text(" ", strip=True)) == "querverweise"
+            continue
+
+        if element.name == "li" and in_crossrefs and current_source:
+            text = element.get_text(" ", strip=True)
+            if text.startswith("+"):
+                _append_crossrefs(parsed, seen, *current_source, "UNCLASSIFIED", text)
+
+    return parsed
+
+
+def parse_cross_references(html: str) -> list[ParsedCrossReference]:
+    soup = BeautifulSoup(html, "html.parser")
+
+    categorized = _parse_jw_category_view(soup)
+    if categorized:
+        return categorized
+
+    return _parse_wol_treasure_view(soup)
+
+
 def _http_get(url: str) -> str:
     headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; BibleUniverseLocalResearch/0.2)",
+        "User-Agent": "Mozilla/5.0 (compatible; BibleUniverseLocalResearch/0.3)",
         "Accept-Language": "de-DE,de;q=0.9,en;q=0.5",
     }
     with httpx.Client(timeout=30.0, follow_redirects=True, headers=headers) as client:
@@ -237,13 +296,16 @@ def _wol_url_from_jw_url(url: str) -> str | None:
         return None
     if book_index + 1 >= len(parts):
         return None
+
     book_slug = _ascii_slug(parts[book_index])
     chapter_text = parts[book_index + 1]
     if not chapter_text.isdigit():
         return None
+
     book_number = JW_BOOK_SLUG_TO_NUMBER.get(book_slug)
     if not book_number:
         return None
+
     return f"https://wol.jw.org/de/wol/b/r10/lp-x/nwtsty/{book_number}/{int(chapter_text)}"
 
 
@@ -277,27 +339,44 @@ def _book_map(session: Session) -> dict[str, BibleBook]:
     return result
 
 
-def _verse_lookup(session: Session, book_id: int, chapter_number: int, verse_number: int) -> BibleVerse | None:
+def _verse_lookup(
+    session: Session,
+    book_id: int,
+    chapter_number: int,
+    verse_number: int,
+) -> BibleVerse | None:
     statement = (
         select(BibleVerse)
         .join(BibleChapter, BibleVerse.chapter_id == BibleChapter.id)
-        .where(BibleChapter.book_id == book_id,
-               BibleChapter.chapter_number == chapter_number,
-               BibleVerse.verse_number == verse_number)
+        .where(
+            BibleChapter.book_id == book_id,
+            BibleChapter.chapter_number == chapter_number,
+            BibleVerse.verse_number == verse_number,
+        )
     )
     return session.scalar(statement)
 
 
-def import_cross_references(session: Session, url: str, *, commit: bool = False) -> dict[str, int | str]:
+def import_cross_references(
+    session: Session,
+    url: str,
+    *,
+    commit: bool = False,
+) -> dict[str, int | str]:
     html, effective_url = fetch_reference_page(url)
     parsed_rows = parse_cross_references(html)
     books = _book_map(session)
-    source_catalog = session.scalar(select(SourceCatalog).where(SourceCatalog.code == "JW_NWT_STUDY_DE"))
+
+    source_catalog = session.scalar(
+        select(SourceCatalog).where(SourceCatalog.code == "JW_NWT_STUDY_DE")
+    )
     if source_catalog is None:
         raise RuntimeError("JW_NWT_STUDY_DE source catalog entry is missing")
 
     imported = 0
     skipped = 0
+    unclassified = 0
+
     for parsed in parsed_rows:
         source_book = books.get(_normalize_token(parsed.source_book_abbreviation))
         target_book = books.get(_normalize_token(parsed.target.book_abbreviation))
@@ -305,14 +384,23 @@ def import_cross_references(session: Session, url: str, *, commit: bool = False)
             skipped += 1
             continue
 
-        source_verse = _verse_lookup(session, source_book.id, parsed.source_chapter, parsed.source_verse)
-        target_start = _verse_lookup(session, target_book.id, parsed.target.chapter, parsed.target.verse_start)
-        target_end = _verse_lookup(session, target_book.id, parsed.target.chapter, parsed.target.verse_end)
+        source_verse = _verse_lookup(
+            session, source_book.id, parsed.source_chapter, parsed.source_verse
+        )
+        target_start = _verse_lookup(
+            session, target_book.id, parsed.target.chapter, parsed.target.verse_start
+        )
+        target_end = _verse_lookup(
+            session, target_book.id, parsed.target.chapter, parsed.target.verse_end
+        )
+
         if source_verse is None or target_start is None or target_end is None:
             skipped += 1
             continue
 
-        target_end_id = target_end.id if target_end.id != target_start.id else None
+        if parsed.native_category == "UNCLASSIFIED":
+            unclassified += 1
+
         existing = session.scalar(
             select(CrossReference.id).where(
                 CrossReference.source_verse_id == source_verse.id,
@@ -325,18 +413,22 @@ def import_cross_references(session: Session, url: str, *, commit: bool = False)
             skipped += 1
             continue
 
-        session.add(CrossReference(
-            source_verse_id=source_verse.id,
-            target_start_verse_id=target_start.id,
-            target_end_verse_id=target_end_id,
-            source_catalog_id=source_catalog.id,
-            native_category=parsed.native_category,
-            relation_type=CANONICAL_RELATION_MAP.get(parsed.native_category),
-            provenance_level="VERIFIED",
-            confidence=1.0,
-            source_url=effective_url,
-            source_anchor=source_verse.source_reference,
-        ))
+        session.add(
+            CrossReference(
+                source_verse_id=source_verse.id,
+                target_start_verse_id=target_start.id,
+                target_end_verse_id=(
+                    target_end.id if target_end.id != target_start.id else None
+                ),
+                source_catalog_id=source_catalog.id,
+                native_category=parsed.native_category,
+                relation_type=CANONICAL_RELATION_MAP.get(parsed.native_category),
+                provenance_level="VERIFIED",
+                confidence=1.0,
+                source_url=effective_url,
+                source_anchor=source_verse.source_reference,
+            )
+        )
         imported += 1
 
     if commit:
@@ -349,5 +441,6 @@ def import_cross_references(session: Session, url: str, *, commit: bool = False)
         "imported": imported if commit else 0,
         "would_import": imported,
         "skipped": skipped,
+        "unclassified": unclassified,
         "source_used": effective_url,
     }
