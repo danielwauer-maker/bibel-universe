@@ -1,12 +1,13 @@
 from collections.abc import Generator
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from .db import Base, SessionLocal, engine
+from .galaxy import build_galaxy_binary
 from .models import (
     BibleBook,
     BibleChapter,
@@ -42,7 +43,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="Bible Universe API",
-    version="0.3.4",
+    version="0.4.0",
     description="Local-first API for the Scripture Knowledge Graph.",
     lifespan=lifespan,
 )
@@ -115,6 +116,19 @@ def stats(db: Session = Depends(get_db)) -> StatsOut:
         greek_books=greek_count,
         verse_structure_ready=verse_count == 31102,
         jw_source_ready=jw_source_ready,
+    )
+
+
+@app.get("/api/galaxy/verses.bin")
+def galaxy_verses_binary(db: Session = Depends(get_db)) -> Response:
+    payload = build_galaxy_binary(db)
+    return Response(
+        content=payload,
+        media_type="application/octet-stream",
+        headers={
+            "Cache-Control": "public, max-age=300",
+            "X-Bible-Universe-Format": "BUG1;float32x9",
+        },
     )
 
 
