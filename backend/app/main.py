@@ -42,7 +42,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="Bible Universe API",
-    version="0.3.3",
+    version="0.3.4",
     description="Local-first API for the Scripture Knowledge Graph.",
     lifespan=lifespan,
 )
@@ -215,7 +215,7 @@ def get_live_verse_text(verse_id: int, db: Session = Depends(get_db)) -> VerseTe
     try:
         live = fetch_live_verse_text(chapter.book_id, chapter.chapter_number, verse.verse_number)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Official WOL verse text unavailable: {exc}") from exc
+        raise HTTPException(status_code=502, detail=f"Official NWT verse text unavailable: {exc}") from exc
 
     return VerseTextOut(
         verse_id=verse.id,
@@ -311,7 +311,6 @@ def get_verse_graph(
     if focus is None:
         raise HTTPException(status_code=404, detail="Verse not found")
 
-    # First build the visible one-hop neighborhood around the focus verse.
     incident_rows = list(
         db.scalars(
             select(CrossReference)
@@ -331,8 +330,6 @@ def get_verse_graph(
         visible_ids.add(row.source_verse_id)
         visible_ids.add(row.target_start_verse_id)
 
-    # Then include all known relations between those visible nodes. This is what makes
-    # triangles/cliques visible instead of drawing only spokes from the focus node.
     neighborhood_rows = list(
         db.scalars(
             select(CrossReference)
@@ -356,8 +353,6 @@ def get_verse_graph(
             role="focus" if verse.id == verse_id else "connected",
         )
 
-    # Reciprocal references are retained as separate source evidence in PostgreSQL,
-    # but represented by one visual edge in the graph.
     grouped: dict[tuple[int, int], list[CrossReference]] = {}
     for row in neighborhood_rows:
         pair = tuple(sorted((row.source_verse_id, row.target_start_verse_id)))
@@ -369,10 +364,12 @@ def get_verse_graph(
         directions = {(row.source_verse_id, row.target_start_verse_id) for row in evidence}
         bidirectional = (left_id, right_id) in directions and (right_id, left_id) in directions
         categories = {row.native_category for row in evidence}
-        relation_types = {row.relation_type for row in evidence if row.relation_type is not None}
+        relation_types = sorted({row.relation_type for row in evidence if row.relation_type is not None})
+        has_direct_reference = any(
+            row.relation_type is None and row.provenance_level == "VERIFIED"
+            for row in evidence
+        )
 
-        # Preserve a real source direction for metadata. The frontend may animate away
-        # from the currently active node without mutating this stored direction.
         source_id = first.source_verse_id
         target_id = first.target_start_verse_id
 
@@ -384,8 +381,16 @@ def get_verse_graph(
                 cross_reference_id=first.id,
                 cross_reference_ids=[row.id for row in evidence],
                 native_category=next(iter(categories)) if len(categories) == 1 else "MULTIPLE",
-                relation_type=next(iter(relation_types)) if len(relation_types) == 1 else None,
-                provenance_level="VERIFIED" if all(row.provenance_level == "VERIFIED" for row in evidence) else first.provenance_level,
+                relation_type=relation_types[0] if len(relation_types) == 1 else None,
+                relation_types=relation_types,
+                has_direct_reference=has_direct_reference,
+                provenance_level=(
+                    "VERIFIED"
+                    if all(row.provenance_level == "VERIFIED" for row in evidence)
+                    else "MIXED"
+                    if len({row.provenance_level for row in evidence}) > 1
+                    else first.provenance_level
+                ),
                 confidence=max(row.confidence for row in evidence),
                 evidence_count=len(evidence),
                 bidirectional=bidirectional,
