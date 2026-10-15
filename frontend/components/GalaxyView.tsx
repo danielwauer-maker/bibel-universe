@@ -28,6 +28,13 @@ type GalaxyLink = {
   strength: number;
 };
 
+type Subcluster = {
+  id: string;
+  label: string;
+  position: [number, number, number];
+  scale: [number, number, number];
+};
+
 const REGIONS: GalaxyRegion[] = [
   {
     id: "god",
@@ -118,6 +125,15 @@ const LINKS: GalaxyLink[] = [
   { source: "wisdom", target: "faith", strength: 0.55 },
 ];
 
+const JESUS_SUBCLUSTERS: Subcluster[] = [
+  { id: "birth", label: "Geburt & frühes Leben", position: [-1.45, 0.35, 0.4], scale: [1.45, 0.9, 0.85] },
+  { id: "teachings", label: "Lehren", position: [-0.55, 0.95, -0.15], scale: [1.55, 0.95, 0.85] },
+  { id: "miracles", label: "Wunder", position: [0.75, 0.55, 0.2], scale: [1.5, 0.9, 0.85] },
+  { id: "transfiguration", label: "Umgestaltung", position: [1.15, -0.35, 0.5], scale: [1.35, 0.82, 0.8] },
+  { id: "death", label: "Tod", position: [0.15, -0.95, 0.15], scale: [1.35, 0.85, 0.8] },
+  { id: "resurrection", label: "Auferstehung", position: [-1.05, -0.7, -0.15], scale: [1.45, 0.86, 0.82] },
+];
+
 function GalaxyCloud({
   region,
   selected,
@@ -127,59 +143,93 @@ function GalaxyCloud({
   selected: boolean;
   onSelect: () => void;
 }) {
-  const labelOffset = region.id === "congregation" ? -1.35 : 1.55;
+  const labelOffset = region.id === "congregation" ? -1.48 : 1.58;
 
   return (
     <group position={region.position}>
       <Sparkles
-        count={selected ? 520 : 350}
-        speed={0.08}
-        opacity={selected ? 0.98 : 0.8}
+        count={selected ? 560 : 370}
+        speed={0.07}
+        opacity={selected ? 0.98 : 0.82}
         scale={region.scale}
-        size={selected ? 4.6 : 3.3}
-        noise={1.1}
+        size={selected ? 4.7 : 3.25}
+        noise={1.08}
         color={region.color}
       />
       <Sparkles
-        count={selected ? 180 : 110}
-        speed={0.03}
-        opacity={selected ? 0.52 : 0.34}
+        count={selected ? 210 : 125}
+        speed={0.025}
+        opacity={selected ? 0.56 : 0.32}
         scale={[region.scale[0] * 1.34, region.scale[1] * 1.18, region.scale[2] * 1.48]}
-        size={selected ? 2.7 : 2.15}
-        noise={1.8}
+        size={selected ? 2.9 : 2.05}
+        noise={1.9}
         color={region.glow}
       />
 
-      <mesh scale={selected ? 1.5 : 1.1} onClick={(event) => { event.stopPropagation(); onSelect(); }}>
-        <sphereGeometry args={[0.16, 24, 24]} />
+      <mesh scale={selected ? 1.28 : 0.96} onClick={(event) => { event.stopPropagation(); onSelect(); }}>
+        <sphereGeometry args={[0.15, 24, 24]} />
         <meshBasicMaterial color={region.glow} transparent opacity={0.98} />
       </mesh>
-      <mesh scale={selected ? 3.5 : 2.4} onClick={(event) => { event.stopPropagation(); onSelect(); }}>
-        <sphereGeometry args={[0.16, 20, 20]} />
+      <mesh scale={selected ? 3.8 : 2.55} onClick={(event) => { event.stopPropagation(); onSelect(); }}>
+        <sphereGeometry args={[0.15, 20, 20]} />
         <meshBasicMaterial
           color={region.color}
           transparent
-          opacity={selected ? 0.15 : 0.08}
+          opacity={selected ? 0.16 : 0.07}
           depthWrite={false}
           blending={AdditiveBlending}
         />
       </mesh>
-      <pointLight color={region.color} intensity={selected ? 4.8 : 2.2} distance={7.2} />
+      <pointLight color={region.color} intensity={selected ? 5.2 : 2.0} distance={7.6} />
 
       <Text
-        position={[0, labelOffset, 0.35]}
-        fontSize={selected ? 0.3 : 0.235}
+        position={[0, labelOffset, 0.5]}
+        fontSize={selected ? 0.31 : 0.245}
         color={region.glow}
         anchorX="center"
         anchorY="middle"
         textAlign="center"
-        outlineWidth={0.012}
-        outlineColor="#03050b"
-        fillOpacity={selected ? 1 : 0.9}
-        maxWidth={4.6}
+        outlineWidth={0.018}
+        outlineColor="#02040a"
+        fillOpacity={selected ? 1 : 0.98}
+        maxWidth={4.8}
       >
         {region.label.toUpperCase()}
       </Text>
+
+      {selected && region.id === "jesus" ? (
+        <group>
+          {JESUS_SUBCLUSTERS.map((cluster) => (
+            <group key={cluster.id} position={cluster.position}>
+              <Sparkles
+                count={72}
+                speed={0.04}
+                opacity={0.92}
+                scale={cluster.scale}
+                size={2.1}
+                noise={1.05}
+                color={region.glow}
+              />
+              <mesh>
+                <sphereGeometry args={[0.055, 16, 16]} />
+                <meshBasicMaterial color="#FFE1E9" transparent opacity={0.95} />
+              </mesh>
+              <pointLight color={region.color} intensity={0.8} distance={1.7} />
+              <Text
+                position={[0, 0.5, 0.28]}
+                fontSize={0.115}
+                color="#FFD6E2"
+                anchorX="center"
+                anchorY="middle"
+                outlineWidth={0.009}
+                outlineColor="#02040a"
+              >
+                {cluster.label}
+              </Text>
+            </group>
+          ))}
+        </group>
+      ) : null}
     </group>
   );
 }
@@ -189,20 +239,26 @@ function GalaxyConnections({ selectedId }: { selectedId: string }) {
 
   return (
     <>
-      {LINKS.map((link) => {
+      {LINKS.map((link, index) => {
         const source = regionMap.get(link.source);
         const target = regionMap.get(link.target);
         if (!source || !target) return null;
 
         const active = link.source === selectedId || link.target === selectedId;
+        const midpoint: [number, number, number] = [
+          (source.position[0] + target.position[0]) / 2,
+          (source.position[1] + target.position[1]) / 2 + (index % 2 === 0 ? 0.26 : -0.22),
+          (source.position[2] + target.position[2]) / 2 + (index % 3 - 1) * 0.35,
+        ];
+
         return (
           <Line
             key={`${link.source}:${link.target}`}
-            points={[source.position, target.position]}
-            color={active ? "#9FC7FF" : "#263D67"}
-            lineWidth={active ? 1.55 + link.strength * 0.7 : 0.65 + link.strength * 0.35}
+            points={[source.position, midpoint, target.position]}
+            color={active ? "#A9CFFF" : "#21385E"}
+            lineWidth={active ? 1.05 + link.strength * 0.45 : 0.5 + link.strength * 0.25}
             transparent
-            opacity={active ? 0.34 + link.strength * 0.26 : 0.1 + link.strength * 0.08}
+            opacity={active ? 0.2 + link.strength * 0.17 : 0.055 + link.strength * 0.06}
           />
         );
       })}
@@ -239,8 +295,8 @@ export default function GalaxyView({ stats }: { stats: GalaxyStats | null }) {
           <color attach="background" args={["#02040a"]} />
           <fog attach="fog" args={["#02040a", 11, 28]} />
           <ambientLight intensity={0.16} />
-          <Stars radius={52} depth={30} count={2600} factor={2.15} saturation={0.82} fade speed={0.12} />
-          <Stars radius={26} depth={18} count={900} factor={1.15} saturation={0.45} fade speed={0.06} />
+          <Stars radius={54} depth={32} count={2900} factor={2.12} saturation={0.84} fade speed={0.11} />
+          <Stars radius={27} depth={19} count={1050} factor={1.12} saturation={0.48} fade speed={0.055} />
 
           <GalaxyConnections selectedId={selectedId} />
           {REGIONS.map((region) => (
@@ -251,7 +307,7 @@ export default function GalaxyView({ stats }: { stats: GalaxyStats | null }) {
               onSelect={() => setSelectedId(region.id)}
             />
           ))}
-          <OrbitControls enableDamping dampingFactor={0.065} minDistance={7} maxDistance={24} autoRotate autoRotateSpeed={0.065} />
+          <OrbitControls enableDamping dampingFactor={0.065} minDistance={7} maxDistance={24} autoRotate autoRotateSpeed={0.052} />
         </Canvas>
 
         <div className="galaxyLegend">
