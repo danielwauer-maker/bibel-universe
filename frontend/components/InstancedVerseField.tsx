@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import {
+  AdditiveBlending,
   Color,
   Group,
   InstancedMesh,
@@ -59,8 +60,6 @@ export default function InstancedVerseField({
   const frameCounter = useRef(0);
   const { camera, gl } = useThree();
 
-  // Keep the prop part of the public interface for the upcoming semantic palette engine.
-  // Region-specific materials are used for V1 because this path is deterministic across GPUs.
   void colors;
 
   const selectedIndex = useMemo(() => {
@@ -71,6 +70,15 @@ export default function InstancedVerseField({
     return -1;
   }, [data, selectedVerseId]);
 
+  const selectedPosition = useMemo<[number, number, number] | null>(() => {
+    if (selectedIndex < 0) return null;
+    return [
+      data.positions[selectedIndex * 3],
+      data.positions[selectedIndex * 3 + 1],
+      data.positions[selectedIndex * 3 + 2],
+    ];
+  }, [data, selectedIndex]);
+
   const regionIndices = useMemo(() => {
     const buckets = Array.from({ length: REGION_COLORS.length }, () => [] as number[]);
     for (let i = 0; i < data.count; i++) {
@@ -80,19 +88,34 @@ export default function InstancedVerseField({
   }, [data]);
 
   const regionMeshes = useMemo(() => {
-    return regionIndices.map((indices, regionId) => {
-      const geometry = new SphereGeometry(1, 7, 5);
-      const material = new MeshBasicMaterial({
-        color: new Color(REGION_COLORS[regionId]),
+    return regionIndices.flatMap((indices, regionId) => {
+      const color = new Color(REGION_COLORS[regionId]);
+      const coreGeometry = new SphereGeometry(1, 8, 6);
+      const haloGeometry = new SphereGeometry(1, 6, 4);
+      const coreMaterial = new MeshBasicMaterial({
+        color,
         transparent: true,
-        opacity: 0.98,
+        opacity: 0.96,
         toneMapped: false,
         depthWrite: true,
       });
-      const mesh = new InstancedMesh(geometry, material, Math.max(1, indices.length));
-      mesh.frustumCulled = false;
-      mesh.userData.verseIndices = indices;
-      return mesh;
+      const haloMaterial = new MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.095,
+        toneMapped: false,
+        depthWrite: false,
+        blending: AdditiveBlending,
+      });
+      const core = new InstancedMesh(coreGeometry, coreMaterial, Math.max(1, indices.length));
+      const halo = new InstancedMesh(haloGeometry, haloMaterial, Math.max(1, indices.length));
+      core.frustumCulled = false;
+      halo.frustumCulled = false;
+      core.userData.verseIndices = indices;
+      halo.userData.verseIndices = indices;
+      core.userData.layer = "core";
+      halo.userData.layer = "halo";
+      return [core, halo];
     });
   }, [regionIndices]);
 
@@ -104,32 +127,38 @@ export default function InstancedVerseField({
   }, [regionMeshes]);
 
   useEffect(() => {
-    regionMeshes.forEach((mesh, regionId) => {
+    for (let regionId = 0; regionId < REGION_COLORS.length; regionId++) {
       const indices = regionIndices[regionId];
+      const core = regionMeshes[regionId * 2];
+      const halo = regionMeshes[regionId * 2 + 1];
+
       for (let localIndex = 0; localIndex < indices.length; localIndex++) {
         const verseIndex = indices[localIndex];
-        const degreeBoost = Math.min(data.degrees[verseIndex], 10) * 0.018;
+        const degreeBoost = Math.min(data.degrees[verseIndex], 12) * 0.006;
         const selected = verseIndex === selectedIndex;
+        const baseSize = 0.052 + degreeBoost;
 
         dummy.position.set(
           data.positions[verseIndex * 3],
           data.positions[verseIndex * 3 + 1],
           data.positions[verseIndex * 3 + 2],
         );
-        dummy.scale.setScalar(selected ? 0.24 : 0.068 + degreeBoost);
+        dummy.scale.setScalar(selected ? 0.12 : baseSize);
         dummy.updateMatrix();
-        mesh.setMatrixAt(localIndex, dummy.matrix);
-      }
-      mesh.count = indices.length;
-      mesh.instanceMatrix.needsUpdate = true;
-      mesh.computeBoundingSphere();
+        core.setMatrixAt(localIndex, dummy.matrix);
 
-      const material = mesh.material as MeshBasicMaterial;
-      material.color.set(selectedIndex >= 0 && data.regions[selectedIndex] % REGION_COLORS.length === regionId
-        ? new Color(REGION_COLORS[regionId]).offsetHSL(0, 0.06, 0.12)
-        : new Color(REGION_COLORS[regionId]));
-      material.needsUpdate = true;
-    });
+        dummy.scale.setScalar(selected ? 0.34 : baseSize * 2.25);
+        dummy.updateMatrix();
+        halo.setMatrixAt(localIndex, dummy.matrix);
+      }
+
+      core.count = indices.length;
+      halo.count = indices.length;
+      core.instanceMatrix.needsUpdate = true;
+      halo.instanceMatrix.needsUpdate = true;
+      core.computeBoundingSphere();
+      halo.computeBoundingSphere();
+    }
   }, [regionMeshes, regionIndices, data, selectedIndex]);
 
   useEffect(() => {
@@ -169,7 +198,7 @@ export default function InstancedVerseField({
     const rect = gl.domElement.getBoundingClientRect();
     const mouseX = ((pointer.x + 1) / 2) * rect.width;
     const mouseY = ((1 - pointer.y) / 2) * rect.height;
-    let bestDistance = 18 * 18;
+    let bestDistance = 16 * 16;
     let bestIndex: number | null = null;
     let bestX = mouseX;
     let bestY = mouseY;
@@ -213,5 +242,28 @@ export default function InstancedVerseField({
     };
   }, [regionMeshes]);
 
-  return <group ref={groupRef} />;
+  return (
+    <>
+      <group ref={groupRef} />
+      {selectedPosition ? (
+        <group position={selectedPosition}>
+          <mesh>
+            <sphereGeometry args={[0.12, 18, 12]} />
+            <meshBasicMaterial color="#ffffff" toneMapped={false} />
+          </mesh>
+          <mesh>
+            <sphereGeometry args={[0.42, 18, 12]} />
+            <meshBasicMaterial
+              color="#9fd8ff"
+              transparent
+              opacity={0.16}
+              depthWrite={false}
+              toneMapped={false}
+              blending={AdditiveBlending}
+            />
+          </mesh>
+        </group>
+      ) : null}
+    </>
+  );
 }
