@@ -50,6 +50,12 @@ type JourneyPoint = {
   position: [number, number, number];
 };
 
+type HoverInfo = {
+  label: string;
+  x: number;
+  y: number;
+};
+
 type ControlsHandle = {
   target: Vector3;
   update: () => void;
@@ -59,10 +65,14 @@ function GraphNodeMesh({
   node,
   selected,
   onSelect,
+  onHover,
+  onHoverEnd,
 }: {
   node: PositionedNode;
   selected: boolean;
   onSelect: (node: PositionedNode) => void;
+  onHover: (node: PositionedNode, x: number, y: number) => void;
+  onHoverEnd: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
   const groupRef = useRef<Group>(null);
@@ -78,6 +88,11 @@ function GraphNodeMesh({
     groupRef.current.scale.setScalar(pulse);
   });
 
+  const updateHover = (event: ThreeEvent<PointerEvent>) => {
+    const native = event.nativeEvent;
+    onHover(node, native.clientX, native.clientY);
+  };
+
   return (
     <group ref={groupRef} position={node.position}>
       <mesh
@@ -89,10 +104,16 @@ function GraphNodeMesh({
           event.stopPropagation();
           setHovered(true);
           document.body.style.cursor = "pointer";
+          updateHover(event);
+        }}
+        onPointerMove={(event) => {
+          event.stopPropagation();
+          updateHover(event);
         }}
         onPointerOut={() => {
           setHovered(false);
           document.body.style.cursor = "default";
+          onHoverEnd();
         }}
       >
         <sphereGeometry args={[radius, 36, 36]} />
@@ -226,6 +247,7 @@ export default function VerseGraph({
   const [journeyStatus, setJourneyStatus] = useState<"idle" | "travelling" | "error">("idle");
   const [journeyTarget, setJourneyTarget] = useState<[number, number, number] | null>(null);
   const [journeySequence, setJourneySequence] = useState(0);
+  const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null);
   const [history, setHistory] = useState<JourneyPoint[]>([
     { verse_id: data.focus.id, reference: data.focus.reference, position: [0, 0, 0] },
   ]);
@@ -331,6 +353,7 @@ export default function VerseGraph({
     setGraphData(payload);
     setFocusAnchor(anchor);
     setSelectedId(`verse:${payload.focus.id}`);
+    setHoverInfo(null);
     setJourneyTarget(null);
     setJourneyStatus("idle");
   };
@@ -345,6 +368,7 @@ export default function VerseGraph({
 
     const targetPosition: [number, number, number] = [...next.position];
     setSelectedId(next.id);
+    setHoverInfo(null);
     setJourneyTarget(targetPosition);
     setJourneySequence((current) => current + 1);
     setJourneyStatus("travelling");
@@ -387,6 +411,7 @@ export default function VerseGraph({
     if (!point) return;
 
     const requestId = ++journeyRequest.current;
+    setHoverInfo(null);
     setJourneyTarget(point.position);
     setJourneySequence((current) => current + 1);
     setJourneyStatus("travelling");
@@ -426,10 +451,6 @@ export default function VerseGraph({
             const targetNode = nodeMap.get(edge.target);
             if (!source || !targetNode) return null;
 
-            // The active light pulse always radiates from the true current focus.
-            // While travelling, the selected target glows, but the edge direction
-            // stays focus -> destination. Once the graph switches, the destination
-            // becomes the new canonical focus and pulses outwards from there.
             const active = edge.source === canonicalFocusId || edge.target === canonicalFocusId;
             const focusIsTarget = active && edge.target === canonicalFocusId;
             const pulseSource = focusIsTarget ? targetNode.position : source.position;
@@ -461,6 +482,8 @@ export default function VerseGraph({
               node={node}
               selected={node.id === selectedId}
               onSelect={travelToNode}
+              onHover={(hoveredNode, x, y) => setHoverInfo({ label: hoveredNode.label, x, y })}
+              onHoverEnd={() => setHoverInfo(null)}
             />
           ))}
 
@@ -483,6 +506,31 @@ export default function VerseGraph({
           />
         </Canvas>
 
+        {hoverInfo ? (
+          <div
+            style={{
+              position: "fixed",
+              left: hoverInfo.x + 14,
+              top: hoverInfo.y + 14,
+              zIndex: 9999,
+              pointerEvents: "none",
+              border: "1px solid rgba(121,182,255,.45)",
+              background: "rgba(4,10,22,.94)",
+              color: "#d9ebff",
+              borderRadius: 999,
+              padding: "7px 11px",
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: ".02em",
+              boxShadow: "0 8px 24px rgba(0,0,0,.35)",
+              backdropFilter: "blur(8px)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {hoverInfo.label}
+          </div>
+        ) : null}
+
         <div className="graphJourneyBadge">
           {journeyStatus === "travelling"
             ? `Unterwegs zu ${selectedNode?.label ?? "Ziel"} …`
@@ -491,7 +539,7 @@ export default function VerseGraph({
               : `Fokus: ${graphData.focus.reference}`}
         </div>
         <div className="graphHint">
-          Knoten anklicken · Kamera reist zum Ziel · Ziel bleibt an seiner Position und wird neuer Fokus
+          Knoten anklicken · Kamera reist zum Ziel · Maus über Knoten zeigt die Vers-Quelle
         </div>
       </div>
 
@@ -567,7 +615,7 @@ export default function VerseGraph({
         </dl>
 
         <p className="inspectorNote">
-          Der Fokus bleibt jetzt räumlich am angeklickten Ziel. Nach dem Graph-Wechsel strahlen die Lichtimpulse dauerhaft vom neuen Fokus nach außen.
+          Der Fokus bleibt räumlich am angeklickten Ziel. Direkte Querverweise und spätere semantische Beziehungstypen bleiben getrennt nachvollziehbar.
         </p>
       </aside>
     </div>
