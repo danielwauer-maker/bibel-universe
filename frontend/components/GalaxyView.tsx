@@ -149,17 +149,17 @@ function VerseArcs({ data, graph, selectedVerseId }: { data: VerseFieldData; gra
         const color = EDGE_META[kind].color;
         const middle: [number, number, number] = [
           (start[0] + end[0]) / 2,
-          (start[1] + end[1]) / 2 + 0.6 + (index % 3) * 0.18,
-          (start[2] + end[2]) / 2 + 0.35,
+          (start[1] + end[1]) / 2 + 0.45 + (index % 3) * 0.12,
+          (start[2] + end[2]) / 2 + 0.26,
         ];
         return (
           <Line
             key={edge.id}
             points={[start, middle, end]}
             color={color}
-            lineWidth={kind === "direct" ? 1.6 : 1.25}
+            lineWidth={kind === "direct" ? 0.78 : 0.58}
             transparent
-            opacity={0.78}
+            opacity={kind === "direct" ? 0.48 : 0.36}
           />
         );
       })}
@@ -171,7 +171,7 @@ export default function GalaxyView({ stats }: { stats: GalaxyStats | null }) {
   const [field, setField] = useState<VerseFieldData | null>(null);
   const [books, setBooks] = useState<Map<number, Book>>(new Map());
   const [hover, setHover] = useState<HoverState | null>(null);
-  const [selectedVerseId, setSelectedVerseId] = useState<number | null>(23702);
+  const [selectedVerseId, setSelectedVerseId] = useState<number | null>(null);
   const [verseText, setVerseText] = useState<VerseText | null>(null);
   const [graph, setGraph] = useState<VerseGraph | null>(null);
   const [loading, setLoading] = useState(true);
@@ -206,7 +206,11 @@ export default function GalaxyView({ stats }: { stats: GalaxyStats | null }) {
   }, [apiBase]);
 
   useEffect(() => {
-    if (!selectedVerseId) return;
+    if (!selectedVerseId) {
+      setVerseText(null);
+      setGraph(null);
+      return;
+    }
     const controller = new AbortController();
     setVerseText(null);
     setGraph(null);
@@ -377,7 +381,7 @@ export default function GalaxyView({ stats }: { stats: GalaxyStats | null }) {
           ))}
         </div>
         <div className="galaxyControls"><span>✦ Orbit</span><span>✋ Pan</span><span>⌕ Zoom</span><b>3D</b></div>
-        <div className="galaxyPrototypeBadge">GPU Engine V1 · 31.102 echte Vers-Knoten · UMAP folgt als semantisches Layout</div>
+        <div className="galaxyPrototypeBadge">GPU Engine V1 · 31.102 echte Vers-Knoten · relationship-aware UMAP aktiv</div>
       </section>
 
       <aside className="galaxyInspectorPanel galaxyVerseInspector">
@@ -428,7 +432,7 @@ export default function GalaxyView({ stats }: { stats: GalaxyStats | null }) {
             <div><dt>Verspunkte</dt><dd>{field?.count.toLocaleString("de-DE") ?? "–"}</dd></div>
             <div><dt>Rendering</dt><dd>GPU Instancing</dd></div>
             <div><dt>Hover</dt><dd>Screen-Space</dd></div>
-            <div><dt>Layout</dt><dd>stabiler V1-Fallback → UMAP</dd></div>
+            <div><dt>Layout</dt><dd>relationship-aware UMAP</dd></div>
           </dl>
         </div>
       </aside>
