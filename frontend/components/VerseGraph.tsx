@@ -28,17 +28,12 @@ type GraphEdge = {
 };
 
 export type VerseGraphData = {
-  focus: {
-    id: number;
-    reference: string;
-  };
+  focus: { id: number; reference: string };
   nodes: GraphNode[];
   edges: GraphEdge[];
 };
 
-type PositionedNode = GraphNode & {
-  position: [number, number, number];
-};
+type PositionedNode = GraphNode & { position: [number, number, number] };
 
 type VerseTextData = {
   verse_id: number;
@@ -49,16 +44,9 @@ type VerseTextData = {
   storage_mode: string;
 };
 
-type ControlsHandle = {
-  target: Vector3;
-  update: () => void;
-};
+type ControlsHandle = { target: Vector3; update: () => void };
 
-function GraphNodeMesh({
-  node,
-  selected,
-  onSelect,
-}: {
+function GraphNodeMesh({ node, selected, onSelect }: {
   node: PositionedNode;
   selected: boolean;
   onSelect: (node: PositionedNode) => void;
@@ -77,24 +65,16 @@ function GraphNodeMesh({
     groupRef.current.scale.setScalar(pulse);
   });
 
-  const handleClick = (event: ThreeEvent<MouseEvent>) => {
-    event.stopPropagation();
-    onSelect(node);
-  };
-
   return (
     <group ref={groupRef} position={node.position}>
       <mesh
-        onClick={handleClick}
+        onClick={(event: ThreeEvent<MouseEvent>) => { event.stopPropagation(); onSelect(node); }}
         onPointerOver={(event) => {
           event.stopPropagation();
           setHovered(true);
           document.body.style.cursor = "pointer";
         }}
-        onPointerOut={() => {
-          setHovered(false);
-          document.body.style.cursor = "default";
-        }}
+        onPointerOut={() => { setHovered(false); document.body.style.cursor = "default"; }}
       >
         <sphereGeometry args={[radius, 36, 36]} />
         <meshStandardMaterial
@@ -105,7 +85,6 @@ function GraphNodeMesh({
           metalness={0.1}
         />
       </mesh>
-
       <mesh scale={selected ? 1.9 : focus ? 1.55 : 1.4}>
         <sphereGeometry args={[radius, 28, 28]} />
         <meshBasicMaterial
@@ -116,7 +95,6 @@ function GraphNodeMesh({
           blending={AdditiveBlending}
         />
       </mesh>
-
       <pointLight
         intensity={selected ? 6.4 : focus ? 4.8 : 2.5}
         distance={selected ? 9 : focus ? 7 : 4.8}
@@ -126,12 +104,7 @@ function GraphNodeMesh({
   );
 }
 
-function AnimatedConnection({
-  source,
-  target,
-  active,
-  phase,
-}: {
+function AnimatedConnection({ source, target, active, phase }: {
   source: [number, number, number];
   target: [number, number, number];
   active: boolean;
@@ -167,11 +140,7 @@ function AnimatedConnection({
   );
 }
 
-function CameraJourney({
-  target,
-  journeyKey,
-  controlsRef,
-}: {
+function CameraJourney({ target, journeyKey, controlsRef }: {
   target: [number, number, number];
   journeyKey: string;
   controlsRef: React.MutableRefObject<ControlsHandle | null>;
@@ -180,7 +149,7 @@ function CameraJourney({
   const progress = useRef(1);
   const startCamera = useRef(new Vector3());
   const startTarget = useRef(new Vector3());
-  const destination = useMemo(() => new Vector3(target[0], target[1], target[2]), [target]);
+  const destination = useMemo(() => new Vector3(...target), [target]);
   const cameraDestination = useMemo(
     () => new Vector3(target[0] + 2.4, target[1] + 1.55, target[2] + 5.4),
     [target],
@@ -197,7 +166,6 @@ function CameraJourney({
     progress.current = Math.min(1, progress.current + delta / 1.65);
     const p = progress.current;
     const eased = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
-
     camera.position.lerpVectors(startCamera.current, cameraDestination, eased);
     if (controlsRef.current) {
       controlsRef.current.target.lerpVectors(startTarget.current, destination, eased);
@@ -211,25 +179,23 @@ function CameraJourney({
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
 export default function VerseGraph({ data }: { data: VerseGraphData }) {
-  const [graphData, setGraphData] = useState<VerseGraphData>(data);
-  const [selectedId, setSelectedId] = useState(`verse:${data.focus.id}`);
+  // The prop is only the entry point. From here on the explorer owns its graph state.
+  // This prevents later parent re-renders from snapping the journey back to Mat 17:1.
+  const [graphData, setGraphData] = useState<VerseGraphData>(() => data);
+  const [selectedId, setSelectedId] = useState(() => `verse:${data.focus.id}`);
   const [verseText, setVerseText] = useState<VerseTextData | null>(null);
   const [textStatus, setTextStatus] = useState<"loading" | "ready" | "error">("loading");
   const [journeyStatus, setJourneyStatus] = useState<"idle" | "travelling" | "error">("idle");
   const controlsRef = useRef<ControlsHandle | null>(null);
   const journeyRequest = useRef(0);
 
-  useEffect(() => {
-    setGraphData(data);
-    setSelectedId(`verse:${data.focus.id}`);
-  }, [data]);
-
   const positionedNodes = useMemo<PositionedNode[]>(() => {
-    const focusNode = graphData.nodes.find((node) => node.role === "focus");
-    const connected = graphData.nodes.filter((node) => node.role !== "focus");
+    const focusNode = graphData.nodes.find((node) => node.verse_id === graphData.focus.id)
+      ?? graphData.nodes.find((node) => node.role === "focus");
+    const connected = graphData.nodes.filter((node) => node.verse_id !== graphData.focus.id);
     const result: PositionedNode[] = [];
 
-    if (focusNode) result.push({ ...focusNode, position: [0, 0, 0] });
+    if (focusNode) result.push({ ...focusNode, role: "focus", position: [0, 0, 0] });
 
     const radius = connected.length <= 4 ? 4.2 : connected.length <= 10 ? 5.2 : 6.2;
     connected.forEach((node, index) => {
@@ -240,18 +206,17 @@ export default function VerseGraph({ data }: { data: VerseGraphData }) {
       const localRadius = radius + (layer - 1) * 0.75;
       result.push({
         ...node,
+        role: "connected",
         position: [Math.cos(angle) * localRadius, y, Math.sin(angle) * localRadius + z],
       });
     });
-
     return result;
   }, [graphData]);
 
-  const nodeMap = useMemo(
-    () => new Map(positionedNodes.map((node) => [node.id, node])),
-    [positionedNodes],
-  );
-  const selectedNode = nodeMap.get(selectedId) ?? positionedNodes[0];
+  const nodeMap = useMemo(() => new Map(positionedNodes.map((node) => [node.id, node])), [positionedNodes]);
+  const canonicalFocusId = `verse:${graphData.focus.id}`;
+  const selectedNode = nodeMap.get(selectedId) ?? nodeMap.get(canonicalFocusId) ?? positionedNodes[0];
+  const pulseOriginId = journeyStatus === "travelling" ? selectedId : canonicalFocusId;
 
   useEffect(() => {
     if (!selectedNode) return;
@@ -265,26 +230,25 @@ export default function VerseGraph({ data }: { data: VerseGraphData }) {
         if (!response.ok) throw new Error(`Verse text API responded with ${response.status}`);
         return response.json() as Promise<VerseTextData>;
       })
-      .then((payload) => {
-        setVerseText(payload);
-        setTextStatus("ready");
-      })
-      .catch((error: Error) => {
-        if (error.name !== "AbortError") setTextStatus("error");
-      });
+      .then((payload) => { setVerseText(payload); setTextStatus("ready"); })
+      .catch((error: Error) => { if (error.name !== "AbortError") setTextStatus("error"); });
 
     return () => controller.abort();
   }, [selectedNode?.verse_id]);
 
   const selectedEdges = graphData.edges.filter(
-    (edge) => edge.source === selectedId || edge.target === selectedId,
+    (edge) => edge.source === canonicalFocusId || edge.target === canonicalFocusId,
   );
 
   const travelToNode = async (next: PositionedNode) => {
+    if (journeyStatus === "travelling") return;
+    if (next.verse_id === graphData.focus.id) {
+      setSelectedId(canonicalFocusId);
+      setJourneyStatus("idle");
+      return;
+    }
+
     setSelectedId(next.id);
-
-    if (next.verse_id === graphData.focus.id || journeyStatus === "travelling") return;
-
     const requestId = ++journeyRequest.current;
     setJourneyStatus("travelling");
     const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8010";
@@ -303,6 +267,8 @@ export default function VerseGraph({ data }: { data: VerseGraphData }) {
       setJourneyStatus("idle");
     } catch {
       if (requestId !== journeyRequest.current) return;
+      // A failed expansion must never leave a neighbour pretending to be the focus.
+      setSelectedId(canonicalFocusId);
       setJourneyStatus("error");
     }
   };
@@ -321,10 +287,11 @@ export default function VerseGraph({ data }: { data: VerseGraphData }) {
             const source = nodeMap.get(edge.source);
             const targetNode = nodeMap.get(edge.target);
             if (!source || !targetNode) return null;
-            const active = edge.source === selectedId || edge.target === selectedId;
-            const selectedIsTarget = active && edge.target === selectedId;
-            const pulseSource = selectedIsTarget ? targetNode.position : source.position;
-            const pulseTarget = selectedIsTarget ? source.position : targetNode.position;
+
+            const active = edge.source === pulseOriginId || edge.target === pulseOriginId;
+            const originIsTarget = active && edge.target === pulseOriginId;
+            const pulseSource = originIsTarget ? targetNode.position : source.position;
+            const pulseTarget = originIsTarget ? source.position : targetNode.position;
             const strongerEvidence = (edge.evidence_count ?? 1) > 1;
 
             return (
@@ -348,9 +315,9 @@ export default function VerseGraph({ data }: { data: VerseGraphData }) {
 
           {positionedNodes.map((node) => (
             <GraphNodeMesh
-              key={node.id}
+              key={`${graphData.focus.id}:${node.id}`}
               node={node}
-              selected={node.id === selectedId}
+              selected={node.id === pulseOriginId}
               onSelect={travelToNode}
             />
           ))}
@@ -358,7 +325,7 @@ export default function VerseGraph({ data }: { data: VerseGraphData }) {
           {selectedNode ? (
             <CameraJourney
               target={selectedNode.position}
-              journeyKey={`${graphData.focus.id}:${selectedNode.id}`}
+              journeyKey={`${graphData.focus.id}:${selectedNode.id}:${journeyStatus}`}
               controlsRef={controlsRef}
             />
           ) : null}
@@ -378,7 +345,7 @@ export default function VerseGraph({ data }: { data: VerseGraphData }) {
           {journeyStatus === "travelling"
             ? `Unterwegs zu ${selectedNode?.label ?? "Ziel"} …`
             : journeyStatus === "error"
-              ? "Neue Verbindungen konnten nicht geladen werden"
+              ? `Fokus bleibt: ${graphData.focus.reference}`
               : `Fokus: ${graphData.focus.reference}`}
         </div>
         <div className="graphHint">Knoten anklicken · Kamera reist zum Ziel · Ziel wird neuer Fokus · neue Verbindungen werden geladen</div>
@@ -391,14 +358,10 @@ export default function VerseGraph({ data }: { data: VerseGraphData }) {
         <div className="verseTextBlock">
           <span className="verseTextLabel">Neue-Welt-Übersetzung · live von WOL</span>
           {textStatus === "loading" ? <p className="verseTextState">Vers wird geladen …</p> : null}
-          {textStatus === "error" ? (
-            <p className="verseTextState error">Vers konnte gerade nicht von WOL geladen werden.</p>
-          ) : null}
+          {textStatus === "error" ? <p className="verseTextState error">Vers konnte gerade nicht von WOL geladen werden.</p> : null}
           {verseText ? <p className="verseText">{verseText.text}</p> : null}
           {verseText ? (
-            <a className="sourceLink" href={verseText.source_url} target="_blank" rel="noreferrer">
-              Quelle auf WOL öffnen ↗
-            </a>
+            <a className="sourceLink" href={verseText.source_url} target="_blank" rel="noreferrer">Quelle auf WOL öffnen ↗</a>
           ) : null}
         </div>
 
@@ -411,7 +374,7 @@ export default function VerseGraph({ data }: { data: VerseGraphData }) {
           <div><dt>Quelle</dt><dd>NWT Studienausgabe / WOL</dd></div>
         </dl>
         <p className="inspectorNote">
-          Beim Klick auf einen verbundenen Vers fährt die Kamera zuerst zum Ziel. Danach wird dieser Vers zum neuen Fokus und sein eigener lokaler Knowledge Graph wird aus PostgreSQL geladen.
+          Neue Knoten sind echte Querverweis-Nachbarn des jeweils aktiven Verses. Nach einer erfolgreichen Reise bleibt das Ziel dauerhaft Fokus; nur dessen Verbindungen senden den Lichtimpuls nach außen.
         </p>
       </aside>
     </div>
