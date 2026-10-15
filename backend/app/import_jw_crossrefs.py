@@ -25,7 +25,11 @@ def main() -> None:
         result = import_cross_references(session, args.url, commit=args.commit)
 
     mode = "COMMIT" if args.commit else "DRY RUN"
-    print(f"[{mode}] parsed={result['parsed']} would_import={result['would_import']} imported={result['imported']} skipped={result['skipped']}")
+    print(
+        f"[{mode}] parsed={result['parsed']} would_import={result['would_import']} "
+        f"imported={result['imported']} skipped={result['skipped']}"
+    )
+    print(f"source_used={result['source_used']}")
 
 
 if __name__ == "__main__":
