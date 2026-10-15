@@ -5,3 +5,7 @@ SQLAlchemy==2.0.36
 pydantic==2.10.4
 httpx==0.28.1
 beautifulsoup4==4.12.3
+numpy==2.1.3
+scipy==1.14.1
+scikit-learn==1.5.2
+umap-learn==0.5.7
