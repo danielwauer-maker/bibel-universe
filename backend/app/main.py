@@ -26,8 +26,10 @@ from .schemas import (
     VerseGraphOut,
     VerseOut,
     VerseRefOut,
+    VerseTextOut,
 )
 from .seed_data import seed_bible_skeleton
+from .verse_text import fetch_live_verse_text
 
 
 @asynccontextmanager
@@ -40,7 +42,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="Bible Universe API",
-    version="0.3.1",
+    version="0.3.2",
     description="Local-first API for the Scripture Knowledge Graph.",
     lifespan=lifespan,
 )
@@ -198,6 +200,29 @@ def get_verse(verse_id: int, db: Session = Depends(get_db)) -> BibleVerse:
     if verse is None:
         raise HTTPException(status_code=404, detail="Verse not found")
     return verse
+
+
+@app.get("/api/verses/{verse_id}/text", response_model=VerseTextOut)
+def get_live_verse_text(verse_id: int, db: Session = Depends(get_db)) -> VerseTextOut:
+    verse = db.get(BibleVerse, verse_id)
+    if verse is None:
+        raise HTTPException(status_code=404, detail="Verse not found")
+
+    chapter = db.get(BibleChapter, verse.chapter_id)
+    if chapter is None:
+        raise HTTPException(status_code=404, detail="Chapter not found")
+
+    try:
+        live = fetch_live_verse_text(chapter.book_id, chapter.chapter_number, verse.verse_number)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Official WOL verse text unavailable: {exc}") from exc
+
+    return VerseTextOut(
+        verse_id=verse.id,
+        reference=verse.source_reference or f"Vers {verse.id}",
+        text=live.text,
+        source_url=live.source_url,
+    )
 
 
 @app.get("/api/cross-references", response_model=list[CrossReferenceOut])
