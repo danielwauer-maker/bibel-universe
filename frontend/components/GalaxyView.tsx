@@ -1,8 +1,9 @@
 "use client";
 
-import { OrbitControls, Sparkles, Stars, Text } from "@react-three/drei";
+import { Line, OrbitControls, Sparkles, Stars, Text } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { useMemo, useState } from "react";
+import { AdditiveBlending } from "three";
 
 type GalaxyStats = {
   books: number;
@@ -19,6 +20,12 @@ type GalaxyRegion = {
   position: [number, number, number];
   scale: [number, number, number];
   description: string;
+};
+
+type GalaxyLink = {
+  source: string;
+  target: string;
+  strength: number;
 };
 
 const REGIONS: GalaxyRegion[] = [
@@ -96,42 +103,110 @@ const REGIONS: GalaxyRegion[] = [
   },
 ];
 
-function GalaxyCloud({ region, selected }: { region: GalaxyRegion; selected: boolean }) {
-  const count = selected ? 430 : 280;
+const LINKS: GalaxyLink[] = [
+  { source: "god", target: "law", strength: 1 },
+  { source: "god", target: "wisdom", strength: 0.72 },
+  { source: "god", target: "prophecy", strength: 0.82 },
+  { source: "law", target: "history", strength: 0.76 },
+  { source: "law", target: "jesus", strength: 0.72 },
+  { source: "history", target: "prophecy", strength: 0.74 },
+  { source: "history", target: "jesus", strength: 0.66 },
+  { source: "prophecy", target: "jesus", strength: 1 },
+  { source: "jesus", target: "faith", strength: 0.92 },
+  { source: "jesus", target: "congregation", strength: 0.94 },
+  { source: "faith", target: "congregation", strength: 0.82 },
+  { source: "wisdom", target: "faith", strength: 0.55 },
+];
+
+function GalaxyCloud({
+  region,
+  selected,
+  onSelect,
+}: {
+  region: GalaxyRegion;
+  selected: boolean;
+  onSelect: () => void;
+}) {
   const labelOffset = region.id === "congregation" ? -1.35 : 1.55;
 
   return (
     <group position={region.position}>
       <Sparkles
-        count={count}
-        speed={0.12}
-        opacity={selected ? 1 : 0.82}
+        count={selected ? 520 : 350}
+        speed={0.08}
+        opacity={selected ? 0.98 : 0.8}
         scale={region.scale}
-        size={selected ? 4.2 : 3.1}
-        noise={1.25}
+        size={selected ? 4.6 : 3.3}
+        noise={1.1}
         color={region.color}
       />
-      <mesh scale={selected ? 1.35 : 1}>
+      <Sparkles
+        count={selected ? 180 : 110}
+        speed={0.03}
+        opacity={selected ? 0.52 : 0.34}
+        scale={[region.scale[0] * 1.34, region.scale[1] * 1.18, region.scale[2] * 1.48]}
+        size={selected ? 2.7 : 2.15}
+        noise={1.8}
+        color={region.glow}
+      />
+
+      <mesh scale={selected ? 1.5 : 1.1} onClick={(event) => { event.stopPropagation(); onSelect(); }}>
         <sphereGeometry args={[0.16, 24, 24]} />
-        <meshBasicMaterial color={region.glow} transparent opacity={0.95} />
+        <meshBasicMaterial color={region.glow} transparent opacity={0.98} />
       </mesh>
-      <pointLight color={region.color} intensity={selected ? 3.2 : 1.55} distance={5.8} />
+      <mesh scale={selected ? 3.5 : 2.4} onClick={(event) => { event.stopPropagation(); onSelect(); }}>
+        <sphereGeometry args={[0.16, 20, 20]} />
+        <meshBasicMaterial
+          color={region.color}
+          transparent
+          opacity={selected ? 0.15 : 0.08}
+          depthWrite={false}
+          blending={AdditiveBlending}
+        />
+      </mesh>
+      <pointLight color={region.color} intensity={selected ? 4.8 : 2.2} distance={7.2} />
 
       <Text
         position={[0, labelOffset, 0.35]}
-        fontSize={selected ? 0.28 : 0.23}
+        fontSize={selected ? 0.3 : 0.235}
         color={region.glow}
         anchorX="center"
         anchorY="middle"
         textAlign="center"
         outlineWidth={0.012}
         outlineColor="#03050b"
-        fillOpacity={selected ? 1 : 0.92}
+        fillOpacity={selected ? 1 : 0.9}
         maxWidth={4.6}
       >
         {region.label.toUpperCase()}
       </Text>
     </group>
+  );
+}
+
+function GalaxyConnections({ selectedId }: { selectedId: string }) {
+  const regionMap = useMemo(() => new Map(REGIONS.map((region) => [region.id, region])), []);
+
+  return (
+    <>
+      {LINKS.map((link) => {
+        const source = regionMap.get(link.source);
+        const target = regionMap.get(link.target);
+        if (!source || !target) return null;
+
+        const active = link.source === selectedId || link.target === selectedId;
+        return (
+          <Line
+            key={`${link.source}:${link.target}`}
+            points={[source.position, target.position]}
+            color={active ? "#9FC7FF" : "#263D67"}
+            lineWidth={active ? 1.55 + link.strength * 0.7 : 0.65 + link.strength * 0.35}
+            transparent
+            opacity={active ? 0.34 + link.strength * 0.26 : 0.1 + link.strength * 0.08}
+          />
+        );
+      })}
+    </>
   );
 }
 
@@ -163,12 +238,20 @@ export default function GalaxyView({ stats }: { stats: GalaxyStats | null }) {
         <Canvas camera={{ position: [0, 0, 13.5], fov: 48 }} dpr={[1, 1.5]}>
           <color attach="background" args={["#02040a"]} />
           <fog attach="fog" args={["#02040a", 11, 28]} />
-          <ambientLight intensity={0.18} />
-          <Stars radius={52} depth={30} count={2200} factor={2.1} saturation={0.75} fade speed={0.15} />
+          <ambientLight intensity={0.16} />
+          <Stars radius={52} depth={30} count={2600} factor={2.15} saturation={0.82} fade speed={0.12} />
+          <Stars radius={26} depth={18} count={900} factor={1.15} saturation={0.45} fade speed={0.06} />
+
+          <GalaxyConnections selectedId={selectedId} />
           {REGIONS.map((region) => (
-            <GalaxyCloud key={region.id} region={region} selected={region.id === selectedId} />
+            <GalaxyCloud
+              key={region.id}
+              region={region}
+              selected={region.id === selectedId}
+              onSelect={() => setSelectedId(region.id)}
+            />
           ))}
-          <OrbitControls enableDamping dampingFactor={0.065} minDistance={7} maxDistance={24} autoRotate autoRotateSpeed={0.08} />
+          <OrbitControls enableDamping dampingFactor={0.065} minDistance={7} maxDistance={24} autoRotate autoRotateSpeed={0.065} />
         </Canvas>
 
         <div className="galaxyLegend">
