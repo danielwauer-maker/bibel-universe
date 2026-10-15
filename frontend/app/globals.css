@@ -241,11 +241,206 @@ article p { margin: 0; color: #8c97ad; line-height: 1.55; }
 .bookChip strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9rem; }
 .bookChip small { color: #73819a; font-size: .72rem; }
 
+/* Bible Universe Explorer / Galaxy View */
+.explorerSection { width: min(1400px, calc(100vw - 40px)); }
+.explorerTopbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 18px;
+}
+.explorerTopbar h2 { margin: 6px 0 0; font-size: clamp(1.7rem, 3vw, 2.45rem); letter-spacing: -.04em; }
+.explorerViewSwitch {
+  display: flex;
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid #202b43;
+  border-radius: 14px;
+  background: rgba(6, 10, 20, .84);
+}
+.explorerViewSwitch button {
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: transparent;
+  color: #7f8da7;
+  font: inherit;
+  font-size: .8rem;
+  cursor: pointer;
+}
+.explorerViewSwitch button.active {
+  color: #f4f7ff;
+  background: linear-gradient(135deg, rgba(102, 80, 255, .5), rgba(48, 78, 176, .35));
+  box-shadow: inset 0 0 0 1px rgba(151, 137, 255, .35), 0 0 24px rgba(108, 84, 255, .15);
+}
+.graphSectionMeta { display: flex; justify-content: flex-end; margin: -4px 0 10px; }
+
+.galaxyWorkspace {
+  display: grid;
+  grid-template-columns: 178px minmax(0, 1fr) 310px;
+  min-height: 720px;
+  overflow: hidden;
+  border: 1px solid #202b43;
+  border-radius: 22px;
+  background: #03050b;
+  box-shadow: 0 28px 90px rgba(0,0,0,.42), inset 0 1px rgba(255,255,255,.02);
+}
+.galaxyRail {
+  z-index: 4;
+  padding: 20px 14px;
+  border-right: 1px solid #172238;
+  background: linear-gradient(180deg, rgba(7,12,24,.97), rgba(4,8,17,.95));
+}
+.galaxyBrandMark {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  margin-bottom: 20px;
+  border: 1px solid #604cff;
+  border-radius: 12px;
+  color: #c4b9ff;
+  background: rgba(68, 47, 176, .28);
+  box-shadow: 0 0 24px rgba(108,80,255,.28);
+  font-size: 1.15rem;
+}
+.galaxyTotals { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; margin-bottom: 22px; }
+.galaxyTotals strong { color: #f4f7ff; font-size: 1.18rem; line-height: 1.15; }
+.galaxyTotals span { color: #7787a1; font-size: .68rem; align-self: end; padding-bottom: 2px; }
+.galaxySideNav { display: grid; gap: 8px; }
+.galaxySideNav button {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  align-items: start;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 9px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: #7d8ba3;
+  text-align: left;
+  cursor: default;
+}
+.galaxySideNav button.active {
+  color: #dcd8ff;
+  border-color: rgba(112,89,255,.65);
+  background: linear-gradient(135deg, rgba(66,47,161,.38), rgba(18,30,61,.42));
+  box-shadow: 0 0 22px rgba(96,74,255,.13);
+}
+.galaxySideNav button > span { color: #929cff; font-size: 1rem; line-height: 1.3; }
+.galaxySideNav b { display: block; font-size: .77rem; font-weight: 650; }
+.galaxySideNav small { display: block; margin-top: 3px; color: #66758e; font-size: .59rem; line-height: 1.35; }
+
+.galaxyStage {
+  position: relative;
+  min-width: 0;
+  height: 720px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(79, 68, 181, .08), transparent 34%),
+    #02040a;
+}
+.galaxyStage canvas { width: 100% !important; height: 100% !important; }
+.galaxyRegionLabels { position: absolute; inset: 0; pointer-events: none; z-index: 3; font-size: .63rem; font-weight: 700; letter-spacing: .03em; text-shadow: 0 0 12px currentColor; }
+.galaxyRegionLabels span { position: absolute; }
+.galaxyRegionLabels .wisdom { left: 20%; top: 12%; color: #c989ff; }
+.galaxyRegionLabels .god { left: 49%; top: 10%; color: #f6d177; }
+.galaxyRegionLabels .law { right: 5%; top: 29%; color: #67b4ff; }
+.galaxyRegionLabels .history { left: 5%; top: 42%; color: #67e4e8; }
+.galaxyRegionLabels .jesus { left: 12%; bottom: 19%; color: #ff7b9a; }
+.galaxyRegionLabels .prophecy { right: 4%; top: 49%; color: #ff7474; }
+.galaxyRegionLabels .faith { right: 9%; bottom: 17%; color: #8fe698; }
+.galaxyRegionLabels .congregation { left: 46%; bottom: 8%; color: #9687ff; }
+
+.galaxyLegend {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  z-index: 5;
+  width: 164px;
+  padding: 10px;
+  border: 1px solid rgba(70,88,120,.34);
+  border-radius: 12px;
+  background: rgba(5,10,20,.8);
+  backdrop-filter: blur(10px);
+}
+.galaxyLegend strong { display: block; margin-bottom: 6px; color: #aab6c9; font-size: .65rem; }
+.galaxyLegend button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 4px 3px;
+  border: 0;
+  background: transparent;
+  color: #7b8aa2;
+  font-size: .58rem;
+  text-align: left;
+  cursor: pointer;
+}
+.galaxyLegend button.active { color: #f2f6ff; }
+.galaxyLegend button span { width: 7px; height: 7px; border-radius: 999px; box-shadow: 0 0 8px currentColor; }
+.galaxyControls {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  z-index: 5;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 5px;
+  border: 1px solid #1d2940;
+  border-radius: 12px;
+  background: rgba(4,9,18,.83);
+  backdrop-filter: blur(10px);
+  color: #8291aa;
+  font-size: .62rem;
+}
+.galaxyControls span, .galaxyControls b { padding: 6px 7px; border-radius: 8px; font-weight: 500; }
+.galaxyControls span:first-child { color: #d4cdff; background: rgba(94,75,255,.22); }
+.galaxyPrototypeBadge {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 4;
+  white-space: nowrap;
+  color: #65738a;
+  font-size: .58rem;
+  pointer-events: none;
+}
+
+.galaxyInspectorPanel {
+  z-index: 4;
+  padding: 14px;
+  border-left: 1px solid #172238;
+  background: linear-gradient(180deg, rgba(8,13,25,.98), rgba(5,9,18,.97));
+}
+.galaxyTabs { display: grid; grid-template-columns: repeat(3,1fr); gap: 3px; padding: 3px; border: 1px solid #19243a; border-radius: 11px; background: #0a0f1b; }
+.galaxyTabs button { border: 0; border-radius: 8px; padding: 8px 4px; background: transparent; color: #66758e; font-size: .66rem; }
+.galaxyTabs button.active { color: #f1efff; background: linear-gradient(135deg, rgba(81,62,196,.62), rgba(46,55,116,.5)); }
+.galaxySearch { margin-top: 10px; padding: 10px 11px; border: 1px solid #1e2940; border-radius: 10px; background: #080d18; color: #62718b; font-size: .68rem; }
+.galaxySelectedCard, .galaxyInfoCard { margin-top: 12px; padding: 14px; border: 1px solid #202c45; border-radius: 13px; background: rgba(10,16,29,.86); }
+.galaxySelectedEyebrow { color: #7892bd; font-size: .58rem; text-transform: uppercase; letter-spacing: .1em; }
+.galaxySelectedTitle { display: flex; align-items: center; gap: 9px; margin-top: 9px; color: #f4f7ff; font-family: Georgia, "Times New Roman", serif; font-size: 1.15rem; font-weight: 700; }
+.galaxySelectedTitle i { width: 10px; height: 10px; border-radius: 999px; box-shadow: 0 0 12px currentColor; }
+.galaxySelectedCard p, .galaxyInfoCard p { margin: 11px 0 0; color: #8997ae; font-size: .7rem; line-height: 1.55; }
+.galaxyTags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.galaxyTags span { padding: 4px 7px; border: 1px solid #2b3852; border-radius: 999px; color: #9babc3; background: #0a1120; font-size: .58rem; }
+.galaxyInfoCard h4 { margin: 0; color: #d5dded; font-size: .76rem; }
+.galaxyInfoCard.compact dl { margin: 10px 0 0; }
+.galaxyInfoCard.compact dl > div { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-top: 1px solid #19243a; }
+.galaxyInfoCard.compact dt { color: #65758e; font-size: .62rem; }
+.galaxyInfoCard.compact dd { margin: 0; color: #bcc8da; font-size: .62rem; }
+
 @media (max-width: 1100px) {
   .graphSection { width: 100%; margin-left: 0; transform: none; }
   .graphExperience { grid-template-columns: minmax(0, 1fr) 330px; height: 650px; }
   .graphCanvasWrap, .graphInspector { height: 650px; }
   .graphCanvasWrap canvas { max-height: 650px; }
+  .galaxyWorkspace { grid-template-columns: 150px minmax(0,1fr) 280px; }
 }
 
 @media (max-width: 900px) {
@@ -261,6 +456,11 @@ article p { margin: 0; color: #8c97ad; line-height: 1.55; }
     border-left: 0;
     border-top: 1px solid #1c2940;
   }
+  .explorerTopbar { align-items: start; flex-direction: column; }
+  .galaxyWorkspace { grid-template-columns: 1fr; }
+  .galaxyRail { display: none; }
+  .galaxyStage { height: 580px; }
+  .galaxyInspectorPanel { border-left: 0; border-top: 1px solid #172238; }
 }
 
 @media (max-width: 760px) {
@@ -271,9 +471,16 @@ article p { margin: 0; color: #8c97ad; line-height: 1.55; }
   .graphCanvasWrap { height: 500px; }
   .graphCanvasWrap canvas { max-height: 500px; }
   .graphHint { right: 14px; white-space: normal; }
+  .explorerViewSwitch { width: 100%; }
+  .explorerViewSwitch button { flex: 1; }
+  .galaxyStage { height: 520px; }
+  .galaxyLegend { display: none; }
+  .galaxyPrototypeBadge { left: 16px; right: 16px; transform: none; white-space: normal; text-align: center; }
 }
 
 @media (max-width: 520px) {
   .statsGrid, .bookGrid { grid-template-columns: 1fr; }
   .graphJourneyBadge { display: none; }
+  .galaxyRegionLabels { font-size: .53rem; }
+  .galaxyControls { right: 12px; left: 12px; justify-content: center; flex-wrap: wrap; }
 }
