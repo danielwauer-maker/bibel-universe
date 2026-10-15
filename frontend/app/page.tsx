@@ -14,11 +14,6 @@ const GalaxyView = dynamic(() => import("../components/GalaxyView"), {
   loading: () => <div className="graphLoading">Galaxy View wird geladen …</div>,
 });
 
-type Health = {
-  status: string;
-  service: string;
-};
-
 type Stats = {
   books: number;
   chapters: number;
@@ -30,159 +25,134 @@ type Stats = {
   jw_source_ready: boolean;
 };
 
-type Book = {
-  id: number;
-  canonical_order: number;
-  slug: string;
-  name_de: string;
-  abbreviation: string;
-  scripture_part: "HEBREW" | "GREEK";
-  chapter_count: number;
-};
-
 type ExplorerView = "galaxy" | "graph";
 
-function defer(callback: () => void) {
-  if (typeof window !== "undefined" && "requestIdleCallback" in window) {
-    const id = window.requestIdleCallback(callback, { timeout: 900 });
-    return () => window.cancelIdleCallback(id);
-  }
-  const id = window.setTimeout(callback, 250);
-  return () => window.clearTimeout(id);
-}
+const NAV_ITEMS = [
+  { id: "galaxy", label: "Galaxy View", enabled: true },
+  { id: "graph", label: "Knowledge Graph", enabled: true },
+  { id: "words", label: "Wortstudium", enabled: false },
+  { id: "crossrefs", label: "Querverweise", enabled: false },
+  { id: "timeline", label: "Zeitleiste", enabled: false },
+  { id: "maps", label: "Karten", enabled: false },
+  { id: "research", label: "Recherche", enabled: false },
+  { id: "notes", label: "Notizen", enabled: false },
+] as const;
 
 export default function HomePage() {
-  const [health, setHealth] = useState<Health | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
-  const [books, setBooks] = useState<Book[]>([]);
   const [graph, setGraph] = useState<VerseGraphData | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [graphFocus, setGraphFocus] = useState("Mat 17:1");
   const [visibleEdgeCount, setVisibleEdgeCount] = useState(0);
   const [explorerView, setExplorerView] = useState<ExplorerView>("galaxy");
+  const [apiReady, setApiReady] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
     const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8010";
     const controller = new AbortController();
 
-    Promise.all([
-      fetch(`${apiBase}/health`, { signal: controller.signal }),
-      fetch(`${apiBase}/api/stats`, { signal: controller.signal }),
-    ])
-      .then(async ([healthResponse, statsResponse]) => {
-        if (!healthResponse.ok || !statsResponse.ok) {
-          throw new Error(`API responded with ${!healthResponse.ok ? healthResponse.status : statsResponse.status}`);
-        }
-        const [healthData, statsData] = await Promise.all([
-          healthResponse.json() as Promise<Health>,
-          statsResponse.json() as Promise<Stats>,
-        ]);
-        setHealth(healthData);
-        setStats(statsData);
+    fetch(`${apiBase}/api/stats`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Stats API ${response.status}`);
+        return response.json() as Promise<Stats>;
       })
-      .catch((err: Error) => {
-        if (err.name !== "AbortError") setError(err.message);
+      .then((payload) => {
+        setStats(payload);
+        setApiReady(payload.verse_structure_ready && payload.jw_source_ready);
+      })
+      .catch((error: Error) => {
+        if (error.name !== "AbortError") console.error(error);
       });
 
-    const cancelDeferred = defer(() => {
-      fetch(`${apiBase}/api/graph/verse/23702`, { signal: controller.signal })
-        .then((response) => {
-          if (!response.ok) throw new Error(`Graph API responded with ${response.status}`);
-          return response.json() as Promise<VerseGraphData>;
-        })
-        .then((payload) => {
-          setGraph(payload);
-          setGraphFocus(payload.focus.reference);
-          setVisibleEdgeCount(payload.edges.length);
-        })
-        .catch((err: Error) => {
-          if (err.name !== "AbortError") console.error(err);
-        });
+    fetch(`${apiBase}/api/graph/verse/23702`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Graph API ${response.status}`);
+        return response.json() as Promise<VerseGraphData>;
+      })
+      .then((payload) => {
+        setGraph(payload);
+        setGraphFocus(payload.focus.reference);
+        setVisibleEdgeCount(payload.edges.length);
+      })
+      .catch((error: Error) => {
+        if (error.name !== "AbortError") console.error(error);
+      });
 
-      fetch(`${apiBase}/api/books`, { signal: controller.signal })
-        .then((response) => {
-          if (!response.ok) throw new Error(`Books API responded with ${response.status}`);
-          return response.json() as Promise<Book[]>;
-        })
-        .then(setBooks)
-        .catch((err: Error) => {
-          if (err.name !== "AbortError") console.error(err);
-        });
-    });
-
-    return () => {
-      controller.abort();
-      cancelDeferred();
-    };
+    return () => controller.abort();
   }, []);
 
-  const ready = health && stats?.verse_structure_ready && stats?.jw_source_ready;
+  const activate = (id: string) => {
+    if (id === "galaxy" || id === "graph") {
+      setExplorerView(id);
+      setMobileNavOpen(false);
+    }
+  };
 
   return (
-    <main className="shell">
-      <section className="hero">
-        <p className="eyebrow">S2 · NWT Cross-Reference Foundation</p>
-        <h1>Bible Universe</h1>
-        <p className="lead">
-          31.102 adressierbare Vers-Knoten als Basis für echte, quellenbelegte Verbindungen aus der Neue-Welt-Übersetzung (Studienausgabe).
-        </p>
+    <main className="hermApp">
+      <header className="hermTopbar">
+        <button className="hermBrand" type="button" onClick={() => setExplorerView("galaxy")}> 
+          <span className="hermBrandIcon">✦</span>
+          <span>Bible Universe</span>
+          <small>BETA</small>
+        </button>
 
-        <div className="statusCard">
-          <span className={`dot ${ready ? "ok" : error ? "error" : "pending"}`} />
+        <nav className="hermDesktopNav" aria-label="Bible Universe Navigation">
+          {NAV_ITEMS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              disabled={!item.enabled}
+              onClick={() => activate(item.id)}
+              className={(item.id === explorerView ? "active " : "") + (!item.enabled ? "preview" : "")}
+              title={!item.enabled ? "Wird schrittweise integriert" : undefined}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+
+        <button className="hermMobileMenu" type="button" onClick={() => setMobileNavOpen((value) => !value)}>
+          {explorerView === "galaxy" ? "Galaxy" : "Graph"} ▾
+        </button>
+
+        <div className="hermTopActions">
+          <span className={apiReady ? "hermLive ok" : "hermLive"}>● {apiReady ? "NWT live" : "API"}</span>
+          <button type="button" title="Suche wird als nächster Explorer-Baustein integriert">⌕ Suche</button>
+          <button type="button" title="Filter werden aus der Hermeneutica-Engine übernommen">☷ Filter</button>
+        </div>
+      </header>
+
+      {mobileNavOpen ? (
+        <nav className="hermMobileNav">
+          {NAV_ITEMS.map((item) => (
+            <button key={item.id} type="button" disabled={!item.enabled} onClick={() => activate(item.id)}>
+              {item.label}{!item.enabled ? " · bald" : ""}
+            </button>
+          ))}
+        </nav>
+      ) : null}
+
+      <section className="hermWorkspace">
+        <div className="hermSceneHeader">
           <div>
-            <strong>Lokaler Stack</strong>
-            <p>
-              {ready
-                ? `${health?.service}: ${health?.status} · Versstruktur + JW.org-Quelle bereit`
-                : error
-                  ? `Nicht erreichbar: ${error}`
-                  : "Versstruktur und Quellenkatalog werden geprüft …"}
-            </p>
+            <span className="hermEyebrow">INTERAKTIVER BIBEL-EXPLORER</span>
+            <h1>{explorerView === "galaxy" ? "Die Bibel als semantische Galaxie" : graphFocus}</h1>
+          </div>
+          <div className="hermSceneStats">
+            <span><strong>{stats?.books ?? 66}</strong> Bücher</span>
+            <span><strong>{stats?.chapters?.toLocaleString("de-DE") ?? "1.189"}</strong> Kapitel</span>
+            <span><strong>{stats?.verses?.toLocaleString("de-DE") ?? "31.102"}</strong> Verse</span>
+            <span><strong>{stats?.cross_references?.toLocaleString("de-DE") ?? "–"}</strong> Beziehungen</span>
           </div>
         </div>
 
-        <div className="statsGrid">
-          <div className="metric"><strong>{stats?.books ?? "–"}</strong><span>Bücher</span></div>
-          <div className="metric"><strong>{stats?.chapters?.toLocaleString("de-DE") ?? "–"}</strong><span>Kapitel</span></div>
-          <div className="metric accentMetric"><strong>{stats?.verses?.toLocaleString("de-DE") ?? "–"}</strong><span>Vers-Knoten</span></div>
-          <div className="metric"><strong>{stats?.cross_references?.toLocaleString("de-DE") ?? "–"}</strong><span>importierte Beziehungen</span></div>
-          <div className="metric"><strong>{stats?.hebrew_books ?? "–"}</strong><span>Hebräisch-Aramäisch</span></div>
-          <div className="metric"><strong>{stats?.greek_books ?? "–"}</strong><span>Christlich-Griechisch</span></div>
-        </div>
-
-        <section className="graphSection explorerSection">
-          <div className="explorerTopbar">
-            <div>
-              <p className="eyebrow">Bible Universe Explorer</p>
-              <h2>{explorerView === "galaxy" ? "Die Bibel als semantische Galaxie" : `${graphFocus} als interaktiver Fokus-Knoten`}</h2>
-            </div>
-            <div className="explorerViewSwitch" role="tablist" aria-label="Explorer Ansicht wählen">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={explorerView === "galaxy"}
-                className={explorerView === "galaxy" ? "active" : ""}
-                onClick={() => setExplorerView("galaxy")}
-              >
-                ✦ Galaxy View
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={explorerView === "graph"}
-                className={explorerView === "graph" ? "active" : ""}
-                onClick={() => setExplorerView("graph")}
-              >
-                ⌘ Knowledge Graph
-              </button>
-            </div>
-          </div>
-
+        <div className="hermSceneFrame">
           {explorerView === "galaxy" ? (
             <GalaxyView stats={stats} />
           ) : graph ? (
-            <>
-              <div className="graphSectionMeta"><span className="dataBadge">{visibleEdgeCount} verifizierte Kanten sichtbar</span></div>
+            <div className="hermGraphWrap">
+              <div className="hermGraphMeta">{visibleEdgeCount} sichtbare Beziehungen</div>
               <VerseGraph
                 data={graph}
                 onFocusChange={(reference, edgeCount) => {
@@ -190,63 +160,17 @@ export default function HomePage() {
                   setVisibleEdgeCount(edgeCount);
                 }}
               />
-            </>
+            </div>
           ) : (
-            <div className="graphLoading">Graph-Daten werden nachgeladen …</div>
+            <div className="graphLoading">Knowledge Graph wird geladen …</div>
           )}
-        </section>
-
-        <div className="grid">
-          <article>
-            <span>01</span>
-            <h2>Galaxy View</h2>
-            <p>Die gesamte Bibel als räumliche semantische Landschaft erkunden.</p>
-          </article>
-          <article>
-            <span>02</span>
-            <h2>Knowledge Graph</h2>
-            <p>Verse, Personen, Orte, Ereignisse, Themen und Beziehungen präzise untersuchen.</p>
-          </article>
-          <article>
-            <span>03</span>
-            <h2>Journey Mode</h2>
-            <p>Entlang echter Verbindungen von Knoten zu Knoten durch den Graph gleiten.</p>
-          </article>
         </div>
-
-        <section className="bookSection">
-          <div className="sectionHeading">
-            <div>
-              <p className="eyebrow">Live aus PostgreSQL</p>
-              <h2>66 Bücher · 1.189 Kapitel · 31.102 Vers-Knoten</h2>
-            </div>
-            <span className="dataBadge">
-              {stats?.jw_source_ready ? "JW.org Quelle registriert" : "Quelle wird vorbereitet"}
-            </span>
-          </div>
-
-          <div className="sourceNote">
-            <strong>S2 Datenprinzip</strong>
-            <p>
-              Wir speichern zunächst Verskoordinaten, Querverweis-Beziehungen, Kategorien und Quellen-URLs. Der vollständige NWT-Text wird in dieser Phase nicht in unser Repository kopiert.
-            </p>
-          </div>
-
-          {books.length ? (
-            <div className="bookGrid">
-              {books.map((book) => (
-                <div className="bookChip" key={book.id}>
-                  <span>{book.canonical_order.toString().padStart(2, "0")}</span>
-                  <strong>{book.name_de}</strong>
-                  <small>{book.chapter_count} Kap.</small>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="graphLoading">Bücher werden im Hintergrund geladen …</div>
-          )}
-        </section>
       </section>
+
+      <footer className="hermStatusbar">
+        <span>Bible Universe · Deutsche Oberfläche · NWT über JW.org/WOL</span>
+        <span>Visualisierungsarchitektur adaptiert aus Hermeneutica (MIT)</span>
+      </footer>
     </main>
   );
 }
