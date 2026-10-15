@@ -1,6 +1,6 @@
 "use client";
 
-import { Html, Line, OrbitControls, Stars } from "@react-three/drei";
+import { Line, OrbitControls, Stars } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { useMemo, useState } from "react";
 import type { ThreeEvent } from "@react-three/fiber";
@@ -83,15 +83,6 @@ function GraphNodeMesh({
         distance={focus ? 7 : 4.5}
         color={focus ? "#6aa7ff" : "#9f7aea"}
       />
-      <Html center distanceFactor={9} position={[0, focus ? 0.95 : 0.72, 0]}>
-        <button
-          type="button"
-          className={`graphLabel ${focus ? "focus" : ""} ${selected ? "selected" : ""}`}
-          onClick={() => onSelect(node)}
-        >
-          {node.label}
-        </button>
-      </Html>
     </group>
   );
 }
@@ -174,6 +165,17 @@ export default function VerseGraph({ data }: { data: VerseGraphData }) {
             autoRotateSpeed={0.32}
           />
         </Canvas>
+
+        <div className="graphLabels" aria-hidden="true">
+          {positionedNodes.map((node) => (
+            <span
+              key={node.id}
+              className={`graphLabelStatic ${node.role === "focus" ? "focus" : ""} ${node.id === selectedId ? "selected" : ""}`}
+            >
+              {node.label}
+            </span>
+          ))}
+        </div>
 
         <div className="graphHint">Ziehen zum Drehen · Mausrad zum Zoomen · Knoten anklicken</div>
       </div>
