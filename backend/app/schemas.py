@@ -19,6 +19,11 @@ class VerseOut(BaseModel):
     source_reference: str | None
 
 
+class VerseRefOut(BaseModel):
+    id: int
+    reference: str
+
+
 class BookOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -47,6 +52,42 @@ class CrossReferenceOut(BaseModel):
     provenance_level: str
     confidence: float
     source_url: str | None
+
+
+class CrossReferenceInspectorOut(BaseModel):
+    id: int
+    source: VerseRefOut
+    target_start: VerseRefOut
+    target_end: VerseRefOut | None
+    native_category: str
+    relation_type: str | None
+    provenance_level: str
+    confidence: float
+    source_url: str | None
+
+
+class GraphNodeOut(BaseModel):
+    id: str
+    verse_id: int
+    label: str
+    role: str
+
+
+class GraphEdgeOut(BaseModel):
+    id: str
+    source: str
+    target: str
+    cross_reference_id: int
+    native_category: str
+    relation_type: str | None
+    provenance_level: str
+    confidence: float
+
+
+class VerseGraphOut(BaseModel):
+    focus: VerseRefOut
+    nodes: list[GraphNodeOut]
+    edges: list[GraphEdgeOut]
 
 
 class VerseTextOut(BaseModel):
