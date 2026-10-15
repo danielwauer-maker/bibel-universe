@@ -69,6 +69,7 @@ type EdgeVisual = {
   lineColor: string;
   orbColor: string;
   glowColor: string;
+  nodeColor: string;
   lineWidth: number;
   opacity: number;
   label: string;
@@ -88,53 +89,60 @@ function getEdgeKind(edge: GraphEdge): EdgeKind {
 function getEdgeVisual(kind: EdgeKind, active: boolean, strongerEvidence: boolean): EdgeVisual {
   const base = {
     DIRECT: {
-      lineColor: active ? "#9bc5ff" : "#506f9f",
-      orbColor: active ? "#d9ecff" : "#89a9d6",
-      glowColor: "#9fc8ff",
+      lineColor: active ? "#62B8FF" : "#3975B7",
+      orbColor: active ? "#DDF3FF" : "#6FA7D8",
+      glowColor: "#58B7FF",
+      nodeColor: "#4FA3FF",
       label: "Direkter Querverweis",
     },
     SAME_EVENT: {
-      lineColor: active ? "#62e7df" : "#327f82",
-      orbColor: active ? "#a9fff7" : "#58aaa8",
-      glowColor: "#72f1e8",
+      lineColor: active ? "#4FE6DC" : "#2B8D89",
+      orbColor: active ? "#B8FFF9" : "#56B8B2",
+      glowColor: "#40E0D3",
+      nodeColor: "#39D8C8",
       label: "Gleiches Ereignis",
     },
     PARALLEL_ACCOUNT: {
-      lineColor: active ? "#c393ff" : "#7553a4",
-      orbColor: active ? "#e0c3ff" : "#9877bf",
-      glowColor: "#c79bff",
+      lineColor: active ? "#C47BFF" : "#7B46B2",
+      orbColor: active ? "#E7C5FF" : "#9A67C9",
+      glowColor: "#B96AFF",
+      nodeColor: "#B45CFF",
       label: "Parallelbericht",
     },
     MIXED: {
-      lineColor: active ? "#ffd47a" : "#9b7b42",
-      orbColor: active ? "#fff0b8" : "#b79a62",
-      glowColor: "#ffd47a",
+      lineColor: active ? "#FFD166" : "#A67C2E",
+      orbColor: active ? "#FFF1B8" : "#BE9C55",
+      glowColor: "#FFC857",
+      nodeColor: "#FFC857",
       label: "Mehrere Beziehungen",
     },
     SEMANTIC: {
-      lineColor: active ? "#8fe0b7" : "#4e8067",
-      orbColor: active ? "#c4f6da" : "#70a88a",
-      glowColor: "#95e9bc",
+      lineColor: active ? "#6EE7A8" : "#3A8C61",
+      orbColor: active ? "#C8F8DD" : "#75B993",
+      glowColor: "#62D99D",
+      nodeColor: "#5EDC94",
       label: "Semantische Beziehung",
     },
   }[kind];
 
   return {
     ...base,
-    lineWidth: active ? 2.55 : strongerEvidence ? 1.65 : 1.2,
-    opacity: active ? 0.96 : strongerEvidence ? 0.68 : 0.48,
+    lineWidth: active ? 3.1 : strongerEvidence ? 1.9 : 1.35,
+    opacity: active ? 1 : strongerEvidence ? 0.76 : 0.58,
   };
 }
 
 function GraphNodeMesh({
   node,
   selected,
+  kind,
   onSelect,
   onHover,
   onHoverEnd,
 }: {
   node: PositionedNode;
   selected: boolean;
+  kind: EdgeKind | null;
   onSelect: (node: PositionedNode) => void;
   onHover: (node: PositionedNode, x: number, y: number) => void;
   onHoverEnd: () => void;
@@ -143,7 +151,10 @@ function GraphNodeMesh({
   const groupRef = useRef<Group>(null);
   const focus = node.role === "focus";
   const radius = focus ? 0.54 : 0.32;
-  const emissiveIntensity = selected ? 3.2 : hovered ? 2.45 : focus ? 2.0 : 1.35;
+  const visual = kind ? getEdgeVisual(kind, true, false) : null;
+  const nodeColor = focus ? "#BFEAFF" : visual?.nodeColor ?? "#B45CFF";
+  const emissiveColor = focus ? "#3E9BFF" : visual?.glowColor ?? "#A95CFF";
+  const emissiveIntensity = selected ? 3.5 : hovered ? 2.8 : focus ? 2.2 : 1.65;
 
   useFrame(({ clock }) => {
     if (!groupRef.current) return;
@@ -155,7 +166,7 @@ function GraphNodeMesh({
 
   const updateHover = (event: ThreeEvent<PointerEvent>) => {
     const native = event.nativeEvent;
-    onHover(node, native.clientX, native.clientY);
+    onHover(node, native.offsetX, native.offsetY);
   };
 
   return (
@@ -183,29 +194,29 @@ function GraphNodeMesh({
       >
         <sphereGeometry args={[radius, 36, 36]} />
         <meshStandardMaterial
-          color={focus ? "#8fc5ff" : "#c197ff"}
-          emissive={focus ? "#3478f6" : "#8b3cf6"}
+          color={nodeColor}
+          emissive={emissiveColor}
           emissiveIntensity={emissiveIntensity}
-          roughness={0.18}
-          metalness={0.1}
+          roughness={0.16}
+          metalness={0.12}
         />
       </mesh>
 
-      <mesh scale={selected ? 1.9 : focus ? 1.55 : 1.4}>
+      <mesh scale={selected ? 1.95 : focus ? 1.6 : 1.45}>
         <sphereGeometry args={[radius, 28, 28]} />
         <meshBasicMaterial
-          color={focus ? "#5ea1ff" : "#aa66ff"}
+          color={emissiveColor}
           transparent
-          opacity={selected ? 0.16 : 0.08}
+          opacity={selected ? 0.18 : 0.09}
           depthWrite={false}
           blending={AdditiveBlending}
         />
       </mesh>
 
       <pointLight
-        intensity={selected ? 6.4 : focus ? 4.8 : 2.5}
-        distance={selected ? 9 : focus ? 7 : 4.8}
-        color={focus ? "#6aa7ff" : "#a970ff"}
+        intensity={selected ? 7.2 : focus ? 5.2 : 3.0}
+        distance={selected ? 9 : focus ? 7 : 5.2}
+        color={emissiveColor}
       />
     </group>
   );
@@ -245,15 +256,15 @@ function AnimatedConnection({
 
   return (
     <mesh ref={orbRef}>
-      <sphereGeometry args={[active ? 0.085 : 0.052, 16, 16]} />
+      <sphereGeometry args={[active ? 0.09 : 0.055, 16, 16]} />
       <meshBasicMaterial
         color={color}
         transparent
-        opacity={active ? 0.95 : 0.45}
+        opacity={active ? 0.98 : 0.55}
         depthWrite={false}
         blending={AdditiveBlending}
       />
-      {active ? <pointLight intensity={1.8} distance={2.4} color={glowColor} /> : null}
+      {active ? <pointLight intensity={2.2} distance={2.7} color={glowColor} /> : null}
     </mesh>
   );
 }
@@ -341,42 +352,31 @@ export default function VerseGraph({
     const connected = graphData.nodes.filter((node) => node.verse_id !== graphData.focus.id);
     const result: PositionedNode[] = [];
 
-    if (focusNode) {
+    if (!focusNode) return result;
+
+    const sideLength = connected.length <= 3 ? 4.6 : connected.length <= 8 ? 5.4 : 6.2;
+
+    if (connected.length === 0) {
       result.push({ ...focusNode, role: "focus", position: focusAnchor });
+      return result;
     }
 
-    const radius = connected.length <= 3 ? 4.4 : connected.length <= 8 ? 5.2 : 6.0;
-
-    // Every direct neighbour has the same distance to the current focus.
-    // With two neighbours, a 60° opening angle creates an equilateral triangle.
     if (connected.length === 1) {
-      const node = connected[0];
+      result.push({ ...focusNode, role: "focus", position: focusAnchor });
       result.push({
-        ...node,
+        ...connected[0],
         role: "connected",
-        position: [focusAnchor[0] + radius, focusAnchor[1], focusAnchor[2]],
+        position: [focusAnchor[0] + sideLength, focusAnchor[1], focusAnchor[2]],
       });
-    } else if (connected.length === 2) {
-      const angles = [Math.PI / 3, (2 * Math.PI) / 3];
-      connected.forEach((node, index) => {
-        const angle = angles[index];
-        result.push({
-          ...node,
-          role: "connected",
-          position: [
-            focusAnchor[0] + Math.cos(angle) * radius,
-            focusAnchor[1] + Math.sin(angle) * radius,
-            focusAnchor[2],
-          ],
-        });
-      });
-    } else if (connected.length === 3) {
-      // Focus + three neighbours form a regular tetrahedron in 3D.
-      const scale = radius / Math.sqrt(2);
+      return result;
+    }
+
+    if (connected.length === 2) {
+      // Three total nodes: exact equilateral triangle.
+      result.push({ ...focusNode, role: "focus", position: focusAnchor });
       const offsets: [number, number, number][] = [
-        [scale, scale, scale],
-        [scale, -scale, -scale],
-        [-scale, scale, -scale],
+        [sideLength, 0, 0],
+        [sideLength / 2, (Math.sqrt(3) * sideLength) / 2, 0],
       ];
       connected.forEach((node, index) => {
         const [x, y, z] = offsets[index];
@@ -386,25 +386,52 @@ export default function VerseGraph({
           position: [focusAnchor[0] + x, focusAnchor[1] + y, focusAnchor[2] + z],
         });
       });
-    } else {
-      // Larger clusters cannot have equal pairwise distances. Instead, distribute
-      // nodes evenly across a sphere while keeping focus-to-neighbour distance equal.
-      const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+      return result;
+    }
+
+    if (connected.length === 3) {
+      // Four total nodes: exact regular tetrahedron. All six pairwise distances
+      // are the same in 3D, even though perspective makes some look shorter.
+      result.push({ ...focusNode, role: "focus", position: focusAnchor });
+      const offsets: [number, number, number][] = [
+        [sideLength, 0, 0],
+        [sideLength / 2, (Math.sqrt(3) * sideLength) / 2, 0],
+        [
+          sideLength / 2,
+          sideLength / (2 * Math.sqrt(3)),
+          sideLength * Math.sqrt(2 / 3),
+        ],
+      ];
       connected.forEach((node, index) => {
-        const yUnit = 1 - (2 * (index + 0.5)) / connected.length;
-        const radial = Math.sqrt(Math.max(0, 1 - yUnit * yUnit));
-        const angle = index * goldenAngle;
+        const [x, y, z] = offsets[index];
         result.push({
           ...node,
           role: "connected",
-          position: [
-            focusAnchor[0] + Math.cos(angle) * radial * radius,
-            focusAnchor[1] + yUnit * radius,
-            focusAnchor[2] + Math.sin(angle) * radial * radius,
-          ],
+          position: [focusAnchor[0] + x, focusAnchor[1] + y, focusAnchor[2] + z],
         });
       });
+      return result;
     }
+
+    // More than four points cannot all be pairwise equidistant in 3D.
+    // For larger local neighborhoods we keep every direct neighbor at the same
+    // radius from the focus and distribute them uniformly using a Fibonacci sphere.
+    result.push({ ...focusNode, role: "focus", position: focusAnchor });
+    const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+    connected.forEach((node, index) => {
+      const yUnit = 1 - (2 * (index + 0.5)) / connected.length;
+      const radial = Math.sqrt(Math.max(0, 1 - yUnit * yUnit));
+      const angle = index * goldenAngle;
+      result.push({
+        ...node,
+        role: "connected",
+        position: [
+          focusAnchor[0] + Math.cos(angle) * radial * sideLength,
+          focusAnchor[1] + yUnit * sideLength,
+          focusAnchor[2] + Math.sin(angle) * radial * sideLength,
+        ],
+      });
+    });
 
     return result;
   }, [graphData, focusAnchor]);
@@ -416,6 +443,16 @@ export default function VerseGraph({
 
   const canonicalFocusId = `verse:${graphData.focus.id}`;
   const selectedNode = nodeMap.get(selectedId) ?? nodeMap.get(canonicalFocusId) ?? positionedNodes[0];
+
+  const nodeKinds = useMemo(() => {
+    const kinds = new Map<string, EdgeKind>();
+    for (const edge of graphData.edges) {
+      if (edge.source !== canonicalFocusId && edge.target !== canonicalFocusId) continue;
+      const neighborId = edge.source === canonicalFocusId ? edge.target : edge.source;
+      kinds.set(neighborId, getEdgeKind(edge));
+    }
+    return kinds;
+  }, [graphData.edges, canonicalFocusId]);
 
   useEffect(() => {
     if (!selectedNode) return;
@@ -611,6 +648,7 @@ export default function VerseGraph({
               key={`${graphData.focus.id}:${node.id}`}
               node={node}
               selected={node.id === selectedId}
+              kind={node.role === "focus" ? null : nodeKinds.get(node.id) ?? null}
               onSelect={travelToNode}
               onHover={(hoveredNode, x, y) => setHoverInfo({ label: hoveredNode.label, x, y })}
               onHoverEnd={() => setHoverInfo(null)}
@@ -639,22 +677,23 @@ export default function VerseGraph({
         {hoverInfo ? (
           <div
             style={{
-              position: "fixed",
-              left: hoverInfo.x + 14,
-              top: hoverInfo.y + 14,
+              position: "absolute",
+              left: hoverInfo.x + 10,
+              top: hoverInfo.y - 34,
               zIndex: 9999,
               pointerEvents: "none",
-              border: "1px solid rgba(121,182,255,.45)",
-              background: "rgba(4,10,22,.94)",
-              color: "#d9ebff",
+              border: "1px solid rgba(121,182,255,.5)",
+              background: "rgba(4,10,22,.96)",
+              color: "#E5F2FF",
               borderRadius: 999,
-              padding: "7px 11px",
+              padding: "6px 10px",
               fontSize: 12,
               fontWeight: 700,
               letterSpacing: ".02em",
-              boxShadow: "0 8px 24px rgba(0,0,0,.35)",
+              boxShadow: "0 6px 18px rgba(0,0,0,.34)",
               backdropFilter: "blur(8px)",
               whiteSpace: "nowrap",
+              transform: "translateY(-2px)",
             }}
           >
             {hoverInfo.label}
@@ -683,22 +722,22 @@ export default function VerseGraph({
                   display: "flex",
                   alignItems: "center",
                   gap: 7,
-                  border: "1px solid rgba(120,155,210,.18)",
-                  background: "rgba(3,8,18,.72)",
+                  border: "1px solid rgba(120,155,210,.2)",
+                  background: "rgba(3,8,18,.78)",
                   borderRadius: 999,
                   padding: "5px 9px",
-                  color: "#a9bad3",
+                  color: "#B8C9DF",
                   fontSize: 11,
                   backdropFilter: "blur(8px)",
                 }}
               >
                 <span
                   style={{
-                    width: 18,
-                    height: 2,
+                    width: 20,
+                    height: 3,
                     borderRadius: 999,
                     background: visual.lineColor,
-                    boxShadow: `0 0 8px ${visual.lineColor}`,
+                    boxShadow: `0 0 10px ${visual.lineColor}`,
                   }}
                 />
                 {visual.label}
@@ -748,8 +787,8 @@ export default function VerseGraph({
                 <span
                   key={kind}
                   style={{
-                    border: `1px solid ${visual.lineColor}55`,
-                    background: `${visual.lineColor}12`,
+                    border: `1px solid ${visual.lineColor}66`,
+                    background: `${visual.lineColor}18`,
                     color: visual.lineColor,
                     borderRadius: 999,
                     padding: "5px 8px",
