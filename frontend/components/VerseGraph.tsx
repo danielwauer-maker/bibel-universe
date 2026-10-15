@@ -345,23 +345,66 @@ export default function VerseGraph({
       result.push({ ...focusNode, role: "focus", position: focusAnchor });
     }
 
-    const radius = connected.length <= 4 ? 4.2 : connected.length <= 10 ? 5.2 : 6.2;
-    connected.forEach((node, index) => {
-      const angle = (index / Math.max(connected.length, 1)) * Math.PI * 2;
-      const layer = index % 3;
-      const y = Math.sin(angle * 1.7) * (1.35 + layer * 0.55);
-      const z = Math.cos(angle * 0.8) * (1.15 + layer * 0.38);
-      const localRadius = radius + (layer - 1) * 0.75;
+    const radius = connected.length <= 3 ? 4.4 : connected.length <= 8 ? 5.2 : 6.0;
+
+    // Every direct neighbour has the same distance to the current focus.
+    // With two neighbours, a 60° opening angle creates an equilateral triangle.
+    if (connected.length === 1) {
+      const node = connected[0];
       result.push({
         ...node,
         role: "connected",
-        position: [
-          focusAnchor[0] + Math.cos(angle) * localRadius,
-          focusAnchor[1] + y,
-          focusAnchor[2] + Math.sin(angle) * localRadius + z,
-        ],
+        position: [focusAnchor[0] + radius, focusAnchor[1], focusAnchor[2]],
       });
-    });
+    } else if (connected.length === 2) {
+      const angles = [Math.PI / 3, (2 * Math.PI) / 3];
+      connected.forEach((node, index) => {
+        const angle = angles[index];
+        result.push({
+          ...node,
+          role: "connected",
+          position: [
+            focusAnchor[0] + Math.cos(angle) * radius,
+            focusAnchor[1] + Math.sin(angle) * radius,
+            focusAnchor[2],
+          ],
+        });
+      });
+    } else if (connected.length === 3) {
+      // Focus + three neighbours form a regular tetrahedron in 3D.
+      const scale = radius / Math.sqrt(2);
+      const offsets: [number, number, number][] = [
+        [scale, scale, scale],
+        [scale, -scale, -scale],
+        [-scale, scale, -scale],
+      ];
+      connected.forEach((node, index) => {
+        const [x, y, z] = offsets[index];
+        result.push({
+          ...node,
+          role: "connected",
+          position: [focusAnchor[0] + x, focusAnchor[1] + y, focusAnchor[2] + z],
+        });
+      });
+    } else {
+      // Larger clusters cannot have equal pairwise distances. Instead, distribute
+      // nodes evenly across a sphere while keeping focus-to-neighbour distance equal.
+      const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+      connected.forEach((node, index) => {
+        const yUnit = 1 - (2 * (index + 0.5)) / connected.length;
+        const radial = Math.sqrt(Math.max(0, 1 - yUnit * yUnit));
+        const angle = index * goldenAngle;
+        result.push({
+          ...node,
+          role: "connected",
+          position: [
+            focusAnchor[0] + Math.cos(angle) * radial * radius,
+            focusAnchor[1] + yUnit * radius,
+            focusAnchor[2] + Math.sin(angle) * radial * radius,
+          ],
+        });
+      });
+    }
 
     return result;
   }, [graphData, focusAnchor]);
