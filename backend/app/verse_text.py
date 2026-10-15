@@ -55,13 +55,19 @@ def _looks_like_verse_marker(tag: Tag) -> bool:
 
 
 def _inside_reference_markup(tag: Tag | None) -> bool:
+    """Return True only for actual annotation/reference chrome.
+
+    Do not treat generic `study*` containers as references: on JW.org the entire
+    Study Bible text can live inside elements whose class name contains "study".
+    Doing so silently discarded every verse body for books such as 2 Peter.
+    """
     current = tag
     while current is not None:
         classes = " ".join(current.get("class", [])).lower()
         href = str(current.get("href", "")).lower()
-        if any(token in classes for token in ("footnote", "xref", "reference", "study")):
+        if any(token in classes for token in ("footnote", "xref", "crossref", "reference")):
             return True
-        if href.startswith("#footnote"):
+        if href.startswith("#footnote") or "footnote" in href:
             return True
         current = current.parent if isinstance(current.parent, Tag) else None
     return False
