@@ -81,6 +81,8 @@ class GraphEdgeOut(BaseModel):
     cross_reference_ids: list[int] = []
     native_category: str
     relation_type: str | None
+    relation_types: list[str] = []
+    has_direct_reference: bool = False
     provenance_level: str
     confidence: float
     evidence_count: int = 1
@@ -98,7 +100,7 @@ class VerseTextOut(BaseModel):
     reference: str
     text: str
     source_url: str
-    source_label: str = "Neue-Welt-Übersetzung (Studienausgabe) / WOL"
+    source_label: str = "Neue-Welt-Übersetzung (Studienausgabe) / JW.org + WOL"
     storage_mode: str = "live"
 
 
