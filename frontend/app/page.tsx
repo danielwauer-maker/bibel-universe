@@ -7,44 +7,98 @@ type Health = {
   service: string;
 };
 
+type Stats = {
+  books: number;
+  chapters: number;
+  verses: number;
+  hebrew_books: number;
+  greek_books: number;
+  verse_structure_ready: boolean;
+};
+
+type Book = {
+  id: number;
+  canonical_order: number;
+  slug: string;
+  name_de: string;
+  abbreviation: string;
+  scripture_part: "HEBREW" | "GREEK";
+  chapter_count: number;
+};
+
 export default function HomePage() {
   const [health, setHealth] = useState<Health | null>(null);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [books, setBooks] = useState<Book[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8010";
 
-    fetch(`${apiBase}/health`)
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`API responded with ${response.status}`);
+    Promise.all([
+      fetch(`${apiBase}/health`),
+      fetch(`${apiBase}/api/stats`),
+      fetch(`${apiBase}/api/books`),
+    ])
+      .then(async ([healthResponse, statsResponse, booksResponse]) => {
+        for (const response of [healthResponse, statsResponse, booksResponse]) {
+          if (!response.ok) {
+            throw new Error(`API responded with ${response.status}`);
+          }
         }
-        return response.json();
+
+        const [healthData, statsData, booksData] = await Promise.all([
+          healthResponse.json(),
+          statsResponse.json(),
+          booksResponse.json(),
+        ]);
+
+        setHealth(healthData);
+        setStats(statsData);
+        setBooks(booksData);
       })
-      .then(setHealth)
       .catch((err: Error) => setError(err.message));
   }, []);
 
   return (
     <main className="shell">
       <section className="hero">
-        <p className="eyebrow">S0 · Local Foundation</p>
+        <p className="eyebrow">S1 · Bible Skeleton</p>
         <h1>Bible Universe</h1>
         <p className="lead">
-          Interactive Scripture Knowledge Graph with Galaxy View, Knowledge Graph View and cinematic journeys through biblical connections.
+          Das kanonische Grundgerüst für Galaxy View, Knowledge Graph und die spätere Reise durch echte biblische Verbindungen.
         </p>
 
         <div className="statusCard">
-          <span className={`dot ${health ? "ok" : error ? "error" : "pending"}`} />
+          <span className={`dot ${health && stats ? "ok" : error ? "error" : "pending"}`} />
           <div>
-            <strong>Local API</strong>
+            <strong>Lokaler Stack</strong>
             <p>
-              {health
-                ? `${health.service}: ${health.status}`
+              {health && stats
+                ? `${health.service}: ${health.status} · Bible Skeleton geladen`
                 : error
                   ? `Nicht erreichbar: ${error}`
-                  : "Verbindung wird geprüft …"}
+                  : "API und Bibelstruktur werden geprüft …"}
             </p>
+          </div>
+        </div>
+
+        <div className="statsGrid">
+          <div className="metric">
+            <strong>{stats?.books ?? "–"}</strong>
+            <span>Bücher</span>
+          </div>
+          <div className="metric">
+            <strong>{stats?.chapters?.toLocaleString("de-DE") ?? "–"}</strong>
+            <span>Kapitel</span>
+          </div>
+          <div className="metric">
+            <strong>{stats?.hebrew_books ?? "–"}</strong>
+            <span>Hebräisch-Aramäisch</span>
+          </div>
+          <div className="metric">
+            <strong>{stats?.greek_books ?? "–"}</strong>
+            <span>Christlich-Griechisch</span>
           </div>
         </div>
 
@@ -65,6 +119,26 @@ export default function HomePage() {
             <p>Entlang echter Verbindungen von Knoten zu Knoten durch den Graph gleiten.</p>
           </article>
         </div>
+
+        <section className="bookSection">
+          <div className="sectionHeading">
+            <div>
+              <p className="eyebrow">Live aus PostgreSQL</p>
+              <h2>66 Bücher als erstes echtes Graph-Fundament</h2>
+            </div>
+            <span className="dataBadge">{stats?.chapters ?? "–"} Kapitel geladen</span>
+          </div>
+
+          <div className="bookGrid">
+            {books.map((book) => (
+              <div className="bookChip" key={book.id}>
+                <span>{book.canonical_order.toString().padStart(2, "0")}</span>
+                <strong>{book.name_de}</strong>
+                <small>{book.chapter_count} Kap.</small>
+              </div>
+            ))}
+          </div>
+        </section>
       </section>
     </main>
   );
