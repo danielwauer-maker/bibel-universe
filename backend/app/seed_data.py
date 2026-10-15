@@ -4,7 +4,7 @@ from pathlib import Path
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from .models import BibleBook, BibleChapter, BibleVerse
+from .models import BibleBook, BibleChapter, BibleVerse, SourceCatalog
 
 BOOKS = [
     (1, "1-mose", "1. Mose", "1Mo", "HEBREW", 50),
@@ -167,6 +167,31 @@ def _seed_verses(session: Session) -> None:
     session.commit()
 
 
+def _seed_sources(session: Session) -> None:
+    existing_source = session.scalar(
+        select(SourceCatalog).where(SourceCatalog.code == "JW_NWT_STUDY_DE")
+    )
+    if existing_source:
+        return
+
+    session.add(
+        SourceCatalog(
+            id=1,
+            code="JW_NWT_STUDY_DE",
+            name="Neue-Welt-Übersetzung (Studienausgabe) – Deutsch",
+            publisher="Watch Tower Bible and Tract Society of Pennsylvania",
+            source_kind="BIBLE_STUDY_EDITION",
+            base_url="https://www.jw.org/de/bibliothek/bibel/studienbibel/buecher/",
+            notes=(
+                "Primary verified source for Bible Universe cross-reference metadata. "
+                "S2 stores verse coordinates, links and relationship metadata, not the full NWT text."
+            ),
+        )
+    )
+    session.commit()
+
+
 def seed_bible_skeleton(session: Session) -> None:
     _seed_books_and_chapters(session)
     _seed_verses(session)
+    _seed_sources(session)
