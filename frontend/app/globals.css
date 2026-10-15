@@ -68,15 +68,28 @@ h1 { margin: 8px 0 12px; font-size: clamp(3rem, 9vw, 7rem); line-height: .9; let
 .graphExperience {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 300px;
-  min-height: 560px;
+  height: 560px;
+  min-height: 0;
   overflow: hidden;
   border: 1px solid #22304a;
   border-radius: 22px;
   background: linear-gradient(135deg, rgba(5, 8, 15, .98), rgba(10, 7, 22, .96));
   box-shadow: 0 22px 80px rgba(0, 0, 0, .3), inset 0 1px rgba(255, 255, 255, .025);
 }
-.graphCanvasWrap { position: relative; min-height: 560px; }
-.graphCanvasWrap canvas { display: block; width: 100% !important; height: 100% !important; }
+.graphCanvasWrap {
+  position: relative;
+  width: 100%;
+  height: 560px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.graphCanvasWrap canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  max-height: 560px;
+}
 .graphHint {
   position: absolute;
   left: 18px;
@@ -106,6 +119,8 @@ h1 { margin: 8px 0 12px; font-size: clamp(3rem, 9vw, 7rem); line-height: .9; let
 .graphLabel:hover, .graphLabel.selected { border-color: rgba(143, 183, 255, .9); color: #fff; }
 .graphLabel.focus { color: #eaf3ff; border-color: rgba(103, 163, 255, .65); font-weight: 700; }
 .graphInspector {
+  height: 560px;
+  overflow-y: auto;
   padding: 28px 24px;
   border-left: 1px solid #1c2940;
   background: rgba(8, 12, 23, .88);
@@ -186,15 +201,28 @@ article p { margin: 0; color: #8c97ad; line-height: 1.55; }
 @media (max-width: 900px) {
   .statsGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .bookGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .graphExperience { grid-template-columns: 1fr; }
-  .graphInspector { border-left: 0; border-top: 1px solid #1c2940; }
+  .graphExperience {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  .graphCanvasWrap {
+    height: 520px;
+  }
+  .graphCanvasWrap canvas { max-height: 520px; }
+  .graphInspector {
+    height: auto;
+    overflow: visible;
+    border-left: 0;
+    border-top: 1px solid #1c2940;
+  }
 }
 
 @media (max-width: 760px) {
   .shell { padding: 32px 22px 64px; }
   .grid { grid-template-columns: 1fr; }
   .sectionHeading { align-items: start; flex-direction: column; }
-  .graphCanvasWrap { min-height: 480px; }
+  .graphCanvasWrap { height: 480px; }
+  .graphCanvasWrap canvas { max-height: 480px; }
 }
 
 @media (max-width: 520px) {
