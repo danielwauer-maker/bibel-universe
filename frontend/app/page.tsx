@@ -9,6 +9,11 @@ const VerseGraph = dynamic(() => import("../components/VerseGraph"), {
   loading: () => <div className="graphLoading">3D-Engine wird geladen …</div>,
 });
 
+const GalaxyView = dynamic(() => import("../components/GalaxyView"), {
+  ssr: false,
+  loading: () => <div className="graphLoading">Galaxy View wird geladen …</div>,
+});
+
 type Health = {
   status: string;
   service: string;
@@ -35,6 +40,8 @@ type Book = {
   chapter_count: number;
 };
 
+type ExplorerView = "galaxy" | "graph";
+
 function defer(callback: () => void) {
   if (typeof window !== "undefined" && "requestIdleCallback" in window) {
     const id = window.requestIdleCallback(callback, { timeout: 900 });
@@ -52,6 +59,7 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [graphFocus, setGraphFocus] = useState("Mat 17:1");
   const [visibleEdgeCount, setVisibleEdgeCount] = useState(0);
+  const [explorerView, setExplorerView] = useState<ExplorerView>("galaxy");
 
   useEffect(() => {
     const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8010";
@@ -137,28 +145,52 @@ export default function HomePage() {
           <div className="metric"><strong>{stats?.books ?? "–"}</strong><span>Bücher</span></div>
           <div className="metric"><strong>{stats?.chapters?.toLocaleString("de-DE") ?? "–"}</strong><span>Kapitel</span></div>
           <div className="metric accentMetric"><strong>{stats?.verses?.toLocaleString("de-DE") ?? "–"}</strong><span>Vers-Knoten</span></div>
-          <div className="metric"><strong>{stats?.cross_references?.toLocaleString("de-DE") ?? "–"}</strong><span>importierte Querverweise</span></div>
+          <div className="metric"><strong>{stats?.cross_references?.toLocaleString("de-DE") ?? "–"}</strong><span>importierte Beziehungen</span></div>
           <div className="metric"><strong>{stats?.hebrew_books ?? "–"}</strong><span>Hebräisch-Aramäisch</span></div>
           <div className="metric"><strong>{stats?.greek_books ?? "–"}</strong><span>Christlich-Griechisch</span></div>
         </div>
 
-        <section className="graphSection">
-          <div className="sectionHeading">
+        <section className="graphSection explorerSection">
+          <div className="explorerTopbar">
             <div>
-              <p className="eyebrow">Erster echter 3D Knowledge Graph</p>
-              <h2>{graphFocus} als interaktiver Fokus-Knoten</h2>
+              <p className="eyebrow">Bible Universe Explorer</p>
+              <h2>{explorerView === "galaxy" ? "Die Bibel als semantische Galaxie" : `${graphFocus} als interaktiver Fokus-Knoten`}</h2>
             </div>
-            <span className="dataBadge">{visibleEdgeCount} verifizierte Kanten sichtbar</span>
+            <div className="explorerViewSwitch" role="tablist" aria-label="Explorer Ansicht wählen">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={explorerView === "galaxy"}
+                className={explorerView === "galaxy" ? "active" : ""}
+                onClick={() => setExplorerView("galaxy")}
+              >
+                ✦ Galaxy View
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={explorerView === "graph"}
+                className={explorerView === "graph" ? "active" : ""}
+                onClick={() => setExplorerView("graph")}
+              >
+                ⌘ Knowledge Graph
+              </button>
+            </div>
           </div>
 
-          {graph ? (
-            <VerseGraph
-              data={graph}
-              onFocusChange={(reference, edgeCount) => {
-                setGraphFocus(reference);
-                setVisibleEdgeCount(edgeCount);
-              }}
-            />
+          {explorerView === "galaxy" ? (
+            <GalaxyView stats={stats} />
+          ) : graph ? (
+            <>
+              <div className="graphSectionMeta"><span className="dataBadge">{visibleEdgeCount} verifizierte Kanten sichtbar</span></div>
+              <VerseGraph
+                data={graph}
+                onFocusChange={(reference, edgeCount) => {
+                  setGraphFocus(reference);
+                  setVisibleEdgeCount(edgeCount);
+                }}
+              />
+            </>
           ) : (
             <div className="graphLoading">Graph-Daten werden nachgeladen …</div>
           )}
