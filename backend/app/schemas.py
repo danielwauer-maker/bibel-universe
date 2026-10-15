@@ -10,6 +10,15 @@ class ChapterOut(BaseModel):
     chapter_number: int
 
 
+class VerseOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    chapter_id: int
+    verse_number: int
+    source_reference: str | None
+
+
 class BookOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -24,6 +33,20 @@ class BookOut(BaseModel):
 
 class BookDetailOut(BookOut):
     chapters: list[ChapterOut]
+
+
+class CrossReferenceOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    source_verse_id: int
+    target_start_verse_id: int
+    target_end_verse_id: int | None
+    native_category: str
+    relation_type: str | None
+    provenance_level: str
+    confidence: float
+    source_url: str | None
 
 
 class StatsOut(BaseModel):
