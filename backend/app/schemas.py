@@ -49,45 +49,13 @@ class CrossReferenceOut(BaseModel):
     source_url: str | None
 
 
-class VerseRefOut(BaseModel):
-    id: int
-    reference: str
-
-
-class CrossReferenceInspectorOut(BaseModel):
-    id: int
-    source: VerseRefOut
-    target_start: VerseRefOut
-    target_end: VerseRefOut | None
-    native_category: str
-    relation_type: str | None
-    provenance_level: str
-    confidence: float
-    source_url: str | None
-
-
-class GraphNodeOut(BaseModel):
-    id: str
+class VerseTextOut(BaseModel):
     verse_id: int
-    label: str
-    role: str
-
-
-class GraphEdgeOut(BaseModel):
-    id: str
-    source: str
-    target: str
-    cross_reference_id: int
-    native_category: str
-    relation_type: str | None
-    provenance_level: str
-    confidence: float
-
-
-class VerseGraphOut(BaseModel):
-    focus: VerseRefOut
-    nodes: list[GraphNodeOut]
-    edges: list[GraphEdgeOut]
+    reference: str
+    text: str
+    source_url: str
+    source_label: str = "Neue-Welt-Übersetzung (Studienausgabe) / WOL"
+    storage_mode: str = "live"
 
 
 class StatsOut(BaseModel):
