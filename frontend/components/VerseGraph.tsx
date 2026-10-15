@@ -21,6 +21,8 @@ type GraphEdge = {
   cross_reference_ids?: number[];
   native_category: string;
   relation_type: string | null;
+  relation_types?: string[];
+  has_direct_reference?: boolean;
   provenance_level: string;
   confidence: number;
   evidence_count?: number;
@@ -60,6 +62,69 @@ type ControlsHandle = {
   target: Vector3;
   update: () => void;
 };
+
+type EdgeKind = "DIRECT" | "SAME_EVENT" | "PARALLEL_ACCOUNT" | "MIXED" | "SEMANTIC";
+
+type EdgeVisual = {
+  lineColor: string;
+  orbColor: string;
+  glowColor: string;
+  lineWidth: number;
+  opacity: number;
+  label: string;
+};
+
+function getEdgeKind(edge: GraphEdge): EdgeKind {
+  const relationTypes = edge.relation_types ?? (edge.relation_type ? [edge.relation_type] : []);
+  const hasDirect = edge.has_direct_reference ?? relationTypes.length === 0;
+
+  if (hasDirect && relationTypes.length > 0) return "MIXED";
+  if (hasDirect) return "DIRECT";
+  if (relationTypes.includes("PARALLEL_ACCOUNT")) return "PARALLEL_ACCOUNT";
+  if (relationTypes.includes("SAME_EVENT")) return "SAME_EVENT";
+  return "SEMANTIC";
+}
+
+function getEdgeVisual(kind: EdgeKind, active: boolean, strongerEvidence: boolean): EdgeVisual {
+  const base = {
+    DIRECT: {
+      lineColor: active ? "#9bc5ff" : "#506f9f",
+      orbColor: active ? "#d9ecff" : "#89a9d6",
+      glowColor: "#9fc8ff",
+      label: "Direkter Querverweis",
+    },
+    SAME_EVENT: {
+      lineColor: active ? "#62e7df" : "#327f82",
+      orbColor: active ? "#a9fff7" : "#58aaa8",
+      glowColor: "#72f1e8",
+      label: "Gleiches Ereignis",
+    },
+    PARALLEL_ACCOUNT: {
+      lineColor: active ? "#c393ff" : "#7553a4",
+      orbColor: active ? "#e0c3ff" : "#9877bf",
+      glowColor: "#c79bff",
+      label: "Parallelbericht",
+    },
+    MIXED: {
+      lineColor: active ? "#ffd47a" : "#9b7b42",
+      orbColor: active ? "#fff0b8" : "#b79a62",
+      glowColor: "#ffd47a",
+      label: "Mehrere Beziehungen",
+    },
+    SEMANTIC: {
+      lineColor: active ? "#8fe0b7" : "#4e8067",
+      orbColor: active ? "#c4f6da" : "#70a88a",
+      glowColor: "#95e9bc",
+      label: "Semantische Beziehung",
+    },
+  }[kind];
+
+  return {
+    ...base,
+    lineWidth: active ? 2.55 : strongerEvidence ? 1.65 : 1.2,
+    opacity: active ? 0.96 : strongerEvidence ? 0.68 : 0.48,
+  };
+}
 
 function GraphNodeMesh({
   node,
@@ -151,11 +216,15 @@ function AnimatedConnection({
   target,
   active,
   phase,
+  color,
+  glowColor,
 }: {
   source: [number, number, number];
   target: [number, number, number];
   active: boolean;
   phase: number;
+  color: string;
+  glowColor: string;
 }) {
   const orbRef = useRef<Mesh>(null);
   const start = useMemo(() => new Vector3(...source), [source]);
@@ -178,13 +247,13 @@ function AnimatedConnection({
     <mesh ref={orbRef}>
       <sphereGeometry args={[active ? 0.085 : 0.052, 16, 16]} />
       <meshBasicMaterial
-        color={active ? "#d9ecff" : "#8ea9df"}
+        color={color}
         transparent
         opacity={active ? 0.95 : 0.45}
         depthWrite={false}
         blending={AdditiveBlending}
       />
-      {active ? <pointLight intensity={1.8} distance={2.4} color="#9fc8ff" /> : null}
+      {active ? <pointLight intensity={1.8} distance={2.4} color={glowColor} /> : null}
     </mesh>
   );
 }
@@ -333,6 +402,18 @@ export default function VerseGraph({
     (edge) => edge.source === canonicalFocusId || edge.target === canonicalFocusId,
   );
 
+  const relationshipCounts = useMemo(() => {
+    const counts: Record<EdgeKind, number> = {
+      DIRECT: 0,
+      SAME_EVENT: 0,
+      PARALLEL_ACCOUNT: 0,
+      MIXED: 0,
+      SEMANTIC: 0,
+    };
+    for (const edge of selectedEdges) counts[getEdgeKind(edge)] += 1;
+    return counts;
+  }, [selectedEdges]);
+
   const loadGraph = async (verseId: number) => {
     const cached = graphCache.current.get(verseId);
     if (cached) return cached;
@@ -436,6 +517,8 @@ export default function VerseGraph({
     if (historyIndex > 0) void jumpToHistory(historyIndex - 1);
   };
 
+  const legendKinds: EdgeKind[] = ["DIRECT", "SAME_EVENT", "PARALLEL_ACCOUNT", "MIXED"];
+
   return (
     <div className="graphExperience">
       <div className="graphCanvasWrap">
@@ -456,21 +539,25 @@ export default function VerseGraph({
             const pulseSource = focusIsTarget ? targetNode.position : source.position;
             const pulseTarget = focusIsTarget ? source.position : targetNode.position;
             const strongerEvidence = (edge.evidence_count ?? 1) > 1;
+            const kind = getEdgeKind(edge);
+            const visual = getEdgeVisual(kind, active, strongerEvidence);
 
             return (
               <group key={`${graphData.focus.id}:${edge.id}`}>
                 <Line
                   points={[source.position, targetNode.position]}
-                  color={active ? "#9bc5ff" : strongerEvidence ? "#667fc0" : "#50638f"}
-                  lineWidth={active ? 2.35 : strongerEvidence ? 1.45 : 1.1}
+                  color={visual.lineColor}
+                  lineWidth={visual.lineWidth}
                   transparent
-                  opacity={active ? 0.94 : strongerEvidence ? 0.58 : 0.42}
+                  opacity={visual.opacity}
                 />
                 <AnimatedConnection
                   source={pulseSource}
                   target={pulseTarget}
                   active={active}
                   phase={(index * 0.31) % 1}
+                  color={visual.orbColor}
+                  glowColor={visual.glowColor}
                 />
               </group>
             );
@@ -531,6 +618,52 @@ export default function VerseGraph({
           </div>
         ) : null}
 
+        <div
+          style={{
+            position: "absolute",
+            left: 18,
+            bottom: 48,
+            zIndex: 6,
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 8,
+            maxWidth: "calc(100% - 36px)",
+            pointerEvents: "none",
+          }}
+        >
+          {legendKinds.map((kind) => {
+            const visual = getEdgeVisual(kind, true, false);
+            return (
+              <div
+                key={kind}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 7,
+                  border: "1px solid rgba(120,155,210,.18)",
+                  background: "rgba(3,8,18,.72)",
+                  borderRadius: 999,
+                  padding: "5px 9px",
+                  color: "#a9bad3",
+                  fontSize: 11,
+                  backdropFilter: "blur(8px)",
+                }}
+              >
+                <span
+                  style={{
+                    width: 18,
+                    height: 2,
+                    borderRadius: 999,
+                    background: visual.lineColor,
+                    boxShadow: `0 0 8px ${visual.lineColor}`,
+                  }}
+                />
+                {visual.label}
+              </div>
+            );
+          })}
+        </div>
+
         <div className="graphJourneyBadge">
           {journeyStatus === "travelling"
             ? `Unterwegs zu ${selectedNode?.label ?? "Ziel"} …`
@@ -559,6 +692,33 @@ export default function VerseGraph({
               Quelle öffnen ↗
             </a>
           ) : null}
+        </div>
+
+        <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid rgba(116,155,220,.2)" }}>
+          <span className="verseTextLabel">Beziehungen am Fokus</span>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 9 }}>
+            {legendKinds.map((kind) => {
+              const count = relationshipCounts[kind];
+              if (!count) return null;
+              const visual = getEdgeVisual(kind, true, false);
+              return (
+                <span
+                  key={kind}
+                  style={{
+                    border: `1px solid ${visual.lineColor}55`,
+                    background: `${visual.lineColor}12`,
+                    color: visual.lineColor,
+                    borderRadius: 999,
+                    padding: "5px 8px",
+                    fontSize: 11,
+                    fontWeight: 700,
+                  }}
+                >
+                  {visual.label}: {count}
+                </span>
+              );
+            })}
+          </div>
         </div>
 
         <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid rgba(116,155,220,.2)" }}>
@@ -615,7 +775,7 @@ export default function VerseGraph({
         </dl>
 
         <p className="inspectorNote">
-          Der Fokus bleibt räumlich am angeklickten Ziel. Direkte Querverweise und spätere semantische Beziehungstypen bleiben getrennt nachvollziehbar.
+          Blau = direkter Querverweis, Türkis = gleiches Ereignis, Violett = Parallelbericht. Gold markiert Knotenpaare, für die mehrere Beziehungstypen gleichzeitig belegt sind.
         </p>
       </aside>
     </div>
