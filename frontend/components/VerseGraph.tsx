@@ -4,7 +4,7 @@ import { Line, OrbitControls, Stars } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ThreeEvent } from "@react-three/fiber";
-import { Vector3 } from "three";
+import { AdditiveBlending, Group, Mesh, Vector3 } from "three";
 
 type GraphNode = {
   id: string;
@@ -61,9 +61,18 @@ function GraphNodeMesh({
   onSelect: (node: PositionedNode) => void;
 }) {
   const [hovered, setHovered] = useState(false);
+  const groupRef = useRef<Group>(null);
   const focus = node.role === "focus";
   const radius = focus ? 0.54 : 0.32;
   const emissiveIntensity = selected ? 3.2 : hovered ? 2.45 : focus ? 2.0 : 1.35;
+
+  useFrame(({ clock }) => {
+    if (!groupRef.current) return;
+    const pulse = selected
+      ? 1 + Math.sin(clock.elapsedTime * 3.2) * 0.055
+      : 1 + Math.sin(clock.elapsedTime * 1.8 + node.verse_id * 0.01) * 0.018;
+    groupRef.current.scale.setScalar(pulse);
+  });
 
   const handleClick = (event: ThreeEvent<MouseEvent>) => {
     event.stopPropagation();
@@ -71,7 +80,7 @@ function GraphNodeMesh({
   };
 
   return (
-    <group position={node.position}>
+    <group ref={groupRef} position={node.position}>
       <mesh
         onClick={handleClick}
         onPointerOver={(event) => {
@@ -93,12 +102,65 @@ function GraphNodeMesh({
           metalness={0.1}
         />
       </mesh>
+
+      <mesh scale={selected ? 1.9 : focus ? 1.55 : 1.4}>
+        <sphereGeometry args={[radius, 28, 28]} />
+        <meshBasicMaterial
+          color={focus ? "#5ea1ff" : "#aa66ff"}
+          transparent
+          opacity={selected ? 0.16 : 0.08}
+          depthWrite={false}
+          blending={AdditiveBlending}
+        />
+      </mesh>
+
       <pointLight
-        intensity={selected ? 5.8 : focus ? 4.8 : 2.5}
-        distance={selected ? 8 : focus ? 7 : 4.8}
+        intensity={selected ? 6.4 : focus ? 4.8 : 2.5}
+        distance={selected ? 9 : focus ? 7 : 4.8}
         color={focus ? "#6aa7ff" : "#a970ff"}
       />
     </group>
+  );
+}
+
+function AnimatedConnection({
+  source,
+  target,
+  active,
+  phase,
+}: {
+  source: [number, number, number];
+  target: [number, number, number];
+  active: boolean;
+  phase: number;
+}) {
+  const orbRef = useRef<Mesh>(null);
+  const start = useMemo(() => new Vector3(...source), [source]);
+  const end = useMemo(() => new Vector3(...target), [target]);
+  const current = useMemo(() => new Vector3(), []);
+
+  useFrame(({ clock }) => {
+    if (!orbRef.current) return;
+    const speed = active ? 0.24 : 0.11;
+    const t = (clock.elapsedTime * speed + phase) % 1;
+    current.lerpVectors(start, end, t);
+    orbRef.current.position.copy(current);
+    const shimmer = active ? 0.11 + Math.sin(clock.elapsedTime * 5 + phase * 6) * 0.025 : 0.055;
+    orbRef.current.scale.setScalar(Math.max(0.04, shimmer) / 0.08);
+  });
+
+  return (
+    <mesh ref={orbRef}>
+      <sphereGeometry args={[active ? 0.085 : 0.052, 16, 16]} />
+      <meshBasicMaterial
+        color={active ? "#d9ecff" : "#8ea9df"}
+        transparent
+        opacity={active ? 0.95 : 0.45}
+        depthWrite={false}
+        blending={AdditiveBlending}
+      />
+      {active ? <pointLight intensity={1.8} distance={2.4} color="#9fc8ff" /> : null}
+    </mesh>
   );
 }
 
@@ -209,24 +271,31 @@ export default function VerseGraph({ data }: { data: VerseGraphData }) {
         <Canvas camera={{ position: [0, 2.3, 10.5], fov: 48 }} dpr={[1, 1.75]}>
           <color attach="background" args={["#03050b"]} />
           <fog attach="fog" args={["#03050b", 13, 30]} />
-          <ambientLight intensity={0.3} />
+          <ambientLight intensity={0.28} />
           <directionalLight position={[6, 8, 8]} intensity={1.05} color="#c8d8ff" />
-          <Stars radius={42} depth={22} count={1300} factor={2.2} saturation={0.5} fade speed={0.22} />
+          <Stars radius={42} depth={22} count={1600} factor={2.15} saturation={0.55} fade speed={0.2} />
 
-          {data.edges.map((edge) => {
+          {data.edges.map((edge, index) => {
             const source = nodeMap.get(edge.source);
             const targetNode = nodeMap.get(edge.target);
             if (!source || !targetNode) return null;
             const active = edge.source === selectedId || edge.target === selectedId;
             return (
-              <Line
-                key={edge.id}
-                points={[source.position, targetNode.position]}
-                color={active ? "#8fb7ff" : "#50638f"}
-                lineWidth={active ? 2.2 : 1.15}
-                transparent
-                opacity={active ? 0.95 : 0.48}
-              />
+              <group key={edge.id}>
+                <Line
+                  points={[source.position, targetNode.position]}
+                  color={active ? "#9bc5ff" : "#50638f"}
+                  lineWidth={active ? 2.35 : 1.1}
+                  transparent
+                  opacity={active ? 0.94 : 0.42}
+                />
+                <AnimatedConnection
+                  source={source.position}
+                  target={targetNode.position}
+                  active={active}
+                  phase={(index * 0.31) % 1}
+                />
+              </group>
             );
           })}
 
@@ -257,17 +326,6 @@ export default function VerseGraph({ data }: { data: VerseGraphData }) {
             autoRotate={false}
           />
         </Canvas>
-
-        <div className="graphLabels" aria-hidden="true">
-          {positionedNodes.map((node) => (
-            <span
-              key={node.id}
-              className={`graphLabelStatic ${node.role === "focus" ? "focus" : ""} ${node.id === selectedId ? "selected" : ""}`}
-            >
-              {node.label}
-            </span>
-          ))}
-        </div>
 
         <div className="graphJourneyBadge">
           {selectedNode?.id === `verse:${data.focus.id}` ? "Startpunkt" : `Reise zu ${selectedNode?.label}`}
@@ -300,7 +358,7 @@ export default function VerseGraph({ data }: { data: VerseGraphData }) {
           <div><dt>Quelle</dt><dd>NWT Studienausgabe / WOL</dd></div>
         </dl>
         <p className="inspectorNote">
-          Ein Klick auf einen Knoten startet jetzt eine Kamerafahrt zu diesem Punkt. Der Bibeltext wird dabei live von der offiziellen WOL-Seite geladen und nicht als kompletter Bibeltext im Repository gespeichert.
+          Die Verbindungen zeigen jetzt einen laufenden Lichtimpuls. Ein Klick auf einen Knoten startet die Kamerafahrt und lädt den Bibeltext des Zielpunkts live in den Inspector.
         </p>
       </aside>
     </div>
