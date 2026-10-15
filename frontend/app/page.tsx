@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import VerseGraph, { type VerseGraphData } from "../components/VerseGraph";
 
 type Health = {
   status: string;
@@ -32,6 +33,7 @@ export default function HomePage() {
   const [health, setHealth] = useState<Health | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [books, setBooks] = useState<Book[]>([]);
+  const [graph, setGraph] = useState<VerseGraphData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -41,23 +43,26 @@ export default function HomePage() {
       fetch(`${apiBase}/health`),
       fetch(`${apiBase}/api/stats`),
       fetch(`${apiBase}/api/books`),
+      fetch(`${apiBase}/api/graph/verse/23702`),
     ])
-      .then(async ([healthResponse, statsResponse, booksResponse]) => {
-        for (const response of [healthResponse, statsResponse, booksResponse]) {
+      .then(async ([healthResponse, statsResponse, booksResponse, graphResponse]) => {
+        for (const response of [healthResponse, statsResponse, booksResponse, graphResponse]) {
           if (!response.ok) {
             throw new Error(`API responded with ${response.status}`);
           }
         }
 
-        const [healthData, statsData, booksData] = await Promise.all([
+        const [healthData, statsData, booksData, graphData] = await Promise.all([
           healthResponse.json(),
           statsResponse.json(),
           booksResponse.json(),
+          graphResponse.json(),
         ]);
 
         setHealth(healthData);
         setStats(statsData);
         setBooks(booksData);
+        setGraph(graphData);
       })
       .catch((err: Error) => setError(err.message));
   }, []);
@@ -88,31 +93,29 @@ export default function HomePage() {
         </div>
 
         <div className="statsGrid">
-          <div className="metric">
-            <strong>{stats?.books ?? "–"}</strong>
-            <span>Bücher</span>
-          </div>
-          <div className="metric">
-            <strong>{stats?.chapters?.toLocaleString("de-DE") ?? "–"}</strong>
-            <span>Kapitel</span>
-          </div>
-          <div className="metric accentMetric">
-            <strong>{stats?.verses?.toLocaleString("de-DE") ?? "–"}</strong>
-            <span>Vers-Knoten</span>
-          </div>
-          <div className="metric">
-            <strong>{stats?.cross_references?.toLocaleString("de-DE") ?? "–"}</strong>
-            <span>importierte Querverweise</span>
-          </div>
-          <div className="metric">
-            <strong>{stats?.hebrew_books ?? "–"}</strong>
-            <span>Hebräisch-Aramäisch</span>
-          </div>
-          <div className="metric">
-            <strong>{stats?.greek_books ?? "–"}</strong>
-            <span>Christlich-Griechisch</span>
-          </div>
+          <div className="metric"><strong>{stats?.books ?? "–"}</strong><span>Bücher</span></div>
+          <div className="metric"><strong>{stats?.chapters?.toLocaleString("de-DE") ?? "–"}</strong><span>Kapitel</span></div>
+          <div className="metric accentMetric"><strong>{stats?.verses?.toLocaleString("de-DE") ?? "–"}</strong><span>Vers-Knoten</span></div>
+          <div className="metric"><strong>{stats?.cross_references?.toLocaleString("de-DE") ?? "–"}</strong><span>importierte Querverweise</span></div>
+          <div className="metric"><strong>{stats?.hebrew_books ?? "–"}</strong><span>Hebräisch-Aramäisch</span></div>
+          <div className="metric"><strong>{stats?.greek_books ?? "–"}</strong><span>Christlich-Griechisch</span></div>
         </div>
+
+        <section className="graphSection">
+          <div className="sectionHeading">
+            <div>
+              <p className="eyebrow">Erster echter 3D Knowledge Graph</p>
+              <h2>Matthäus 17:1 als interaktiver Fokus-Knoten</h2>
+            </div>
+            <span className="dataBadge">{graph?.edges.length ?? 0} verifizierte Kanten sichtbar</span>
+          </div>
+
+          {graph ? (
+            <VerseGraph data={graph} />
+          ) : (
+            <div className="graphLoading">3D-Graph wird aus PostgreSQL geladen …</div>
+          )}
+        </section>
 
         <div className="grid">
           <article>
