@@ -58,6 +58,23 @@ class BibleVerse(Base):
     chapter: Mapped[BibleChapter] = relationship(back_populates="verses")
 
 
+class GalaxyCoordinate(Base):
+    __tablename__ = "galaxy_coordinates"
+    __table_args__ = (
+        UniqueConstraint("verse_id", "model_name", name="uq_galaxy_coordinate_verse_model"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    verse_id: Mapped[int] = mapped_column(
+        ForeignKey("bible_verses.id", ondelete="CASCADE"), index=True
+    )
+    model_name: Mapped[str] = mapped_column(String(80), index=True)
+    x: Mapped[float] = mapped_column(Float)
+    y: Mapped[float] = mapped_column(Float)
+    z: Mapped[float] = mapped_column(Float)
+    source_kind: Mapped[str] = mapped_column(String(32), default="RELATIONSHIP_UMAP", index=True)
+
+
 class SourceCatalog(Base):
     __tablename__ = "source_catalog"
 
