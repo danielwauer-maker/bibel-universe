@@ -78,10 +78,13 @@ class GraphEdgeOut(BaseModel):
     source: str
     target: str
     cross_reference_id: int
+    cross_reference_ids: list[int] = []
     native_category: str
     relation_type: str | None
     provenance_level: str
     confidence: float
+    evidence_count: int = 1
+    bidirectional: bool = False
 
 
 class VerseGraphOut(BaseModel):
