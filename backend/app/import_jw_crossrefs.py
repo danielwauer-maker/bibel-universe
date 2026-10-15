@@ -27,7 +27,8 @@ def main() -> None:
     mode = "COMMIT" if args.commit else "DRY RUN"
     print(
         f"[{mode}] parsed={result['parsed']} would_import={result['would_import']} "
-        f"imported={result['imported']} skipped={result['skipped']}"
+        f"imported={result['imported']} skipped={result['skipped']} "
+        f"unclassified={result['unclassified']}"
     )
     print(f"source_used={result['source_used']}")
 
