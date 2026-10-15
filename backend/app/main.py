@@ -18,9 +18,14 @@ from .schemas import (
     BookDetailOut,
     BookOut,
     ChapterOut,
+    CrossReferenceInspectorOut,
     CrossReferenceOut,
+    GraphEdgeOut,
+    GraphNodeOut,
     StatsOut,
+    VerseGraphOut,
     VerseOut,
+    VerseRefOut,
 )
 from .seed_data import seed_bible_skeleton
 
@@ -35,7 +40,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="Bible Universe API",
-    version="0.3.0",
+    version="0.3.1",
     description="Local-first API for the Scripture Knowledge Graph.",
     lifespan=lifespan,
 )
@@ -55,6 +60,13 @@ def get_db() -> Generator[Session, None, None]:
         yield session
     finally:
         session.close()
+
+
+def verse_ref(verse: BibleVerse) -> VerseRefOut:
+    return VerseRefOut(
+        id=verse.id,
+        reference=verse.source_reference or f"Vers {verse.id}",
+    )
 
 
 @app.get("/health")
@@ -207,3 +219,127 @@ def list_cross_references(
     if native_category:
         statement = statement.where(CrossReference.native_category == native_category)
     return list(db.scalars(statement).all())
+
+
+@app.get(
+    "/api/verses/{verse_id}/cross-references",
+    response_model=list[CrossReferenceInspectorOut],
+)
+def inspect_verse_cross_references(
+    verse_id: int,
+    direction: str = Query(default="all", pattern="^(all|outgoing|incoming)$"),
+    db: Session = Depends(get_db),
+) -> list[CrossReferenceInspectorOut]:
+    focus = db.get(BibleVerse, verse_id)
+    if focus is None:
+        raise HTTPException(status_code=404, detail="Verse not found")
+
+    statement = select(CrossReference).order_by(CrossReference.id)
+    if direction == "outgoing":
+        statement = statement.where(CrossReference.source_verse_id == verse_id)
+    elif direction == "incoming":
+        statement = statement.where(
+            or_(
+                CrossReference.target_start_verse_id == verse_id,
+                CrossReference.target_end_verse_id == verse_id,
+            )
+        )
+    else:
+        statement = statement.where(
+            or_(
+                CrossReference.source_verse_id == verse_id,
+                CrossReference.target_start_verse_id == verse_id,
+                CrossReference.target_end_verse_id == verse_id,
+            )
+        )
+
+    rows = list(db.scalars(statement).all())
+    result: list[CrossReferenceInspectorOut] = []
+    for row in rows:
+        source = db.get(BibleVerse, row.source_verse_id)
+        target_start = db.get(BibleVerse, row.target_start_verse_id)
+        target_end = db.get(BibleVerse, row.target_end_verse_id) if row.target_end_verse_id else None
+        if source is None or target_start is None:
+            continue
+        result.append(
+            CrossReferenceInspectorOut(
+                id=row.id,
+                source=verse_ref(source),
+                target_start=verse_ref(target_start),
+                target_end=verse_ref(target_end) if target_end else None,
+                native_category=row.native_category,
+                relation_type=row.relation_type,
+                provenance_level=row.provenance_level,
+                confidence=row.confidence,
+                source_url=row.source_url,
+            )
+        )
+    return result
+
+
+@app.get("/api/graph/verse/{verse_id}", response_model=VerseGraphOut)
+def get_verse_graph(
+    verse_id: int,
+    db: Session = Depends(get_db),
+) -> VerseGraphOut:
+    focus = db.get(BibleVerse, verse_id)
+    if focus is None:
+        raise HTTPException(status_code=404, detail="Verse not found")
+
+    rows = list(
+        db.scalars(
+            select(CrossReference)
+            .where(
+                or_(
+                    CrossReference.source_verse_id == verse_id,
+                    CrossReference.target_start_verse_id == verse_id,
+                    CrossReference.target_end_verse_id == verse_id,
+                )
+            )
+            .order_by(CrossReference.id)
+        ).all()
+    )
+
+    nodes_by_id: dict[int, GraphNodeOut] = {
+        focus.id: GraphNodeOut(
+            id=f"verse:{focus.id}",
+            verse_id=focus.id,
+            label=focus.source_reference or f"Vers {focus.id}",
+            role="focus",
+        )
+    }
+    edges: list[GraphEdgeOut] = []
+
+    for row in rows:
+        source = db.get(BibleVerse, row.source_verse_id)
+        target = db.get(BibleVerse, row.target_start_verse_id)
+        if source is None or target is None:
+            continue
+
+        for verse in (source, target):
+            if verse.id not in nodes_by_id:
+                nodes_by_id[verse.id] = GraphNodeOut(
+                    id=f"verse:{verse.id}",
+                    verse_id=verse.id,
+                    label=verse.source_reference or f"Vers {verse.id}",
+                    role="connected",
+                )
+
+        edges.append(
+            GraphEdgeOut(
+                id=f"xref:{row.id}",
+                source=f"verse:{source.id}",
+                target=f"verse:{target.id}",
+                cross_reference_id=row.id,
+                native_category=row.native_category,
+                relation_type=row.relation_type,
+                provenance_level=row.provenance_level,
+                confidence=row.confidence,
+            )
+        )
+
+    return VerseGraphOut(
+        focus=verse_ref(focus),
+        nodes=list(nodes_by_id.values()),
+        edges=edges,
+    )
