@@ -32,6 +32,17 @@ type Props = {
   onClick?: (index: number) => void;
 };
 
+const REGION_COLORS = [
+  "#F6C85F",
+  "#B86CFF",
+  "#4FA8FF",
+  "#55D8D6",
+  "#FF7096",
+  "#FF625F",
+  "#79E38B",
+  "#8B7CFF",
+] as const;
+
 const dummy = new Object3D();
 const projected = new Vector3();
 const pointer = new Vector2(99, 99);
@@ -48,6 +59,10 @@ export default function InstancedVerseField({
   const frameCounter = useRef(0);
   const { camera, gl } = useThree();
 
+  // Keep the prop part of the public interface for the upcoming semantic palette engine.
+  // Region-specific materials are used for V1 because this path is deterministic across GPUs.
+  void colors;
+
   const selectedIndex = useMemo(() => {
     if (!selectedVerseId) return -1;
     for (let i = 0; i < data.count; i++) {
@@ -56,67 +71,66 @@ export default function InstancedVerseField({
     return -1;
   }, [data, selectedVerseId]);
 
-  const mesh = useMemo(() => {
-    const geometry = new SphereGeometry(1, 7, 5);
-    const material = new MeshBasicMaterial({
-      color: "#ffffff",
-      vertexColors: true,
-      transparent: true,
-      opacity: 1,
-      toneMapped: false,
-      depthWrite: true,
+  const regionIndices = useMemo(() => {
+    const buckets = Array.from({ length: REGION_COLORS.length }, () => [] as number[]);
+    for (let i = 0; i < data.count; i++) {
+      buckets[data.regions[i] % REGION_COLORS.length].push(i);
+    }
+    return buckets;
+  }, [data]);
+
+  const regionMeshes = useMemo(() => {
+    return regionIndices.map((indices, regionId) => {
+      const geometry = new SphereGeometry(1, 7, 5);
+      const material = new MeshBasicMaterial({
+        color: new Color(REGION_COLORS[regionId]),
+        transparent: true,
+        opacity: 0.98,
+        toneMapped: false,
+        depthWrite: true,
+      });
+      const mesh = new InstancedMesh(geometry, material, Math.max(1, indices.length));
+      mesh.frustumCulled = false;
+      mesh.userData.verseIndices = indices;
+      return mesh;
     });
-    const next = new InstancedMesh(geometry, material, data.count);
-    next.frustumCulled = false;
-
-    // Three.js decides whether the shader needs per-instance colors when the
-    // material is compiled for the first time. The mesh can be rendered once
-    // before React effects run, so make instanceColor exist immediately.
-    const white = new Color(1, 1, 1);
-    for (let i = 0; i < data.count; i++) next.setColorAt(i, white);
-    if (next.instanceColor) next.instanceColor.needsUpdate = true;
-    material.needsUpdate = true;
-
-    return next;
-  }, [data.count]);
+  }, [regionIndices]);
 
   useEffect(() => {
     const group = groupRef.current;
     if (!group) return;
-    group.add(mesh);
-    return () => group.remove(mesh);
-  }, [mesh]);
+    regionMeshes.forEach((mesh) => group.add(mesh));
+    return () => regionMeshes.forEach((mesh) => group.remove(mesh));
+  }, [regionMeshes]);
 
   useEffect(() => {
-    const tempColor = new Color();
+    regionMeshes.forEach((mesh, regionId) => {
+      const indices = regionIndices[regionId];
+      for (let localIndex = 0; localIndex < indices.length; localIndex++) {
+        const verseIndex = indices[localIndex];
+        const degreeBoost = Math.min(data.degrees[verseIndex], 10) * 0.018;
+        const selected = verseIndex === selectedIndex;
 
-    for (let i = 0; i < data.count; i++) {
-      const degreeBoost = Math.min(data.degrees[i], 10) * 0.018;
-      const selected = i === selectedIndex;
+        dummy.position.set(
+          data.positions[verseIndex * 3],
+          data.positions[verseIndex * 3 + 1],
+          data.positions[verseIndex * 3 + 2],
+        );
+        dummy.scale.setScalar(selected ? 0.24 : 0.068 + degreeBoost);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(localIndex, dummy.matrix);
+      }
+      mesh.count = indices.length;
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.computeBoundingSphere();
 
-      dummy.position.set(
-        data.positions[i * 3],
-        data.positions[i * 3 + 1],
-        data.positions[i * 3 + 2],
-      );
-      dummy.scale.setScalar(selected ? 0.21 : 0.06 + degreeBoost);
-      dummy.updateMatrix();
-      mesh.setMatrixAt(i, dummy.matrix);
-
-      tempColor.setRGB(
-        Math.max(0.18, colors[i * 3]),
-        Math.max(0.18, colors[i * 3 + 1]),
-        Math.max(0.18, colors[i * 3 + 2]),
-      );
-      if (selected) tempColor.offsetHSL(0, 0.1, 0.24);
-      mesh.setColorAt(i, tempColor);
-    }
-
-    mesh.instanceMatrix.needsUpdate = true;
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-    (mesh.material as MeshBasicMaterial).needsUpdate = true;
-    mesh.computeBoundingSphere();
-  }, [mesh, data, colors, selectedIndex]);
+      const material = mesh.material as MeshBasicMaterial;
+      material.color.set(selectedIndex >= 0 && data.regions[selectedIndex] % REGION_COLORS.length === regionId
+        ? new Color(REGION_COLORS[regionId]).offsetHSL(0, 0.06, 0.12)
+        : new Color(REGION_COLORS[regionId]));
+      material.needsUpdate = true;
+    });
+  }, [regionMeshes, regionIndices, data, selectedIndex]);
 
   useEffect(() => {
     const canvas = gl.domElement;
@@ -161,11 +175,13 @@ export default function InstancedVerseField({
     let bestY = mouseY;
 
     for (let i = 0; i < data.count; i++) {
-      projected.set(
-        data.positions[i * 3],
-        data.positions[i * 3 + 1],
-        data.positions[i * 3 + 2],
-      ).project(camera);
+      projected
+        .set(
+          data.positions[i * 3],
+          data.positions[i * 3 + 1],
+          data.positions[i * 3 + 2],
+        )
+        .project(camera);
       if (projected.z < -1 || projected.z > 1) continue;
       const x = ((projected.x + 1) / 2) * rect.width;
       const y = ((1 - projected.y) / 2) * rect.height;
@@ -190,10 +206,12 @@ export default function InstancedVerseField({
 
   useEffect(() => {
     return () => {
-      mesh.geometry.dispose();
-      (mesh.material as MeshBasicMaterial).dispose();
+      regionMeshes.forEach((mesh) => {
+        mesh.geometry.dispose();
+        (mesh.material as MeshBasicMaterial).dispose();
+      });
     };
-  }, [mesh]);
+  }, [regionMeshes]);
 
   return <group ref={groupRef} />;
 }
