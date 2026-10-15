@@ -5,7 +5,6 @@ import { useFrame, useThree } from "@react-three/fiber";
 import {
   Color,
   Group,
-  InstancedBufferAttribute,
   InstancedMesh,
   MeshBasicMaterial,
   Object3D,
@@ -58,11 +57,17 @@ export default function InstancedVerseField({
   }, [data, selectedVerseId]);
 
   const mesh = useMemo(() => {
-    const geometry = new SphereGeometry(1, 6, 4);
-    const material = new MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.96 });
+    const geometry = new SphereGeometry(1, 7, 5);
+    const material = new MeshBasicMaterial({
+      color: "#ffffff",
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.98,
+      toneMapped: false,
+      depthWrite: true,
+    });
     const next = new InstancedMesh(geometry, material, data.count);
     next.frustumCulled = false;
-    next.instanceColor = new InstancedBufferAttribute(new Float32Array(data.count * 3), 3);
     return next;
   }, [data.count]);
 
@@ -74,27 +79,30 @@ export default function InstancedVerseField({
   }, [mesh]);
 
   useEffect(() => {
-    const colorBuffer = mesh.instanceColor?.array as Float32Array;
     const tempColor = new Color();
 
     for (let i = 0; i < data.count; i++) {
       const degreeBoost = Math.min(data.degrees[i], 10) * 0.018;
       const selected = i === selectedIndex;
+
       dummy.position.set(
         data.positions[i * 3],
         data.positions[i * 3 + 1],
         data.positions[i * 3 + 2],
       );
-      dummy.scale.setScalar(selected ? 0.19 : 0.055 + degreeBoost);
+      dummy.scale.setScalar(selected ? 0.21 : 0.06 + degreeBoost);
       dummy.updateMatrix();
       mesh.setMatrixAt(i, dummy.matrix);
 
-      tempColor.setRGB(colors[i * 3], colors[i * 3 + 1], colors[i * 3 + 2]);
-      if (selected) tempColor.offsetHSL(0, 0.12, 0.28);
-      colorBuffer[i * 3] = tempColor.r;
-      colorBuffer[i * 3 + 1] = tempColor.g;
-      colorBuffer[i * 3 + 2] = tempColor.b;
+      tempColor.setRGB(
+        Math.max(0.12, colors[i * 3]),
+        Math.max(0.12, colors[i * 3 + 1]),
+        Math.max(0.12, colors[i * 3 + 2]),
+      );
+      if (selected) tempColor.offsetHSL(0, 0.1, 0.24);
+      mesh.setColorAt(i, tempColor);
     }
+
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     mesh.computeBoundingSphere();
