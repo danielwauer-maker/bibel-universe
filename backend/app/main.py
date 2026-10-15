@@ -42,7 +42,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="Bible Universe API",
-    version="0.3.2",
+    version="0.3.3",
     description="Local-first API for the Scripture Knowledge Graph.",
     lifespan=lifespan,
 )
@@ -311,7 +311,8 @@ def get_verse_graph(
     if focus is None:
         raise HTTPException(status_code=404, detail="Verse not found")
 
-    rows = list(
+    # First build the visible one-hop neighborhood around the focus verse.
+    incident_rows = list(
         db.scalars(
             select(CrossReference)
             .where(
@@ -325,41 +326,69 @@ def get_verse_graph(
         ).all()
     )
 
-    nodes_by_id: dict[int, GraphNodeOut] = {
-        focus.id: GraphNodeOut(
-            id=f"verse:{focus.id}",
-            verse_id=focus.id,
-            label=focus.source_reference or f"Vers {focus.id}",
-            role="focus",
-        )
-    }
-    edges: list[GraphEdgeOut] = []
+    visible_ids: set[int] = {verse_id}
+    for row in incident_rows:
+        visible_ids.add(row.source_verse_id)
+        visible_ids.add(row.target_start_verse_id)
 
-    for row in rows:
-        source = db.get(BibleVerse, row.source_verse_id)
-        target = db.get(BibleVerse, row.target_start_verse_id)
-        if source is None or target is None:
+    # Then include all known relations between those visible nodes. This is what makes
+    # triangles/cliques visible instead of drawing only spokes from the focus node.
+    neighborhood_rows = list(
+        db.scalars(
+            select(CrossReference)
+            .where(
+                CrossReference.source_verse_id.in_(visible_ids),
+                CrossReference.target_start_verse_id.in_(visible_ids),
+            )
+            .order_by(CrossReference.id)
+        ).all()
+    )
+
+    nodes_by_id: dict[int, GraphNodeOut] = {}
+    for visible_id in sorted(visible_ids):
+        verse = db.get(BibleVerse, visible_id)
+        if verse is None:
             continue
+        nodes_by_id[verse.id] = GraphNodeOut(
+            id=f"verse:{verse.id}",
+            verse_id=verse.id,
+            label=verse.source_reference or f"Vers {verse.id}",
+            role="focus" if verse.id == verse_id else "connected",
+        )
 
-        for verse in (source, target):
-            if verse.id not in nodes_by_id:
-                nodes_by_id[verse.id] = GraphNodeOut(
-                    id=f"verse:{verse.id}",
-                    verse_id=verse.id,
-                    label=verse.source_reference or f"Vers {verse.id}",
-                    role="connected",
-                )
+    # Reciprocal references are retained as separate source evidence in PostgreSQL,
+    # but represented by one visual edge in the graph.
+    grouped: dict[tuple[int, int], list[CrossReference]] = {}
+    for row in neighborhood_rows:
+        pair = tuple(sorted((row.source_verse_id, row.target_start_verse_id)))
+        grouped.setdefault(pair, []).append(row)
+
+    edges: list[GraphEdgeOut] = []
+    for (left_id, right_id), evidence in grouped.items():
+        first = evidence[0]
+        directions = {(row.source_verse_id, row.target_start_verse_id) for row in evidence}
+        bidirectional = (left_id, right_id) in directions and (right_id, left_id) in directions
+        categories = {row.native_category for row in evidence}
+        relation_types = {row.relation_type for row in evidence if row.relation_type is not None}
+
+        # Preserve a real source direction for metadata. The frontend may animate away
+        # from the currently active node without mutating this stored direction.
+        source_id = first.source_verse_id
+        target_id = first.target_start_verse_id
 
         edges.append(
             GraphEdgeOut(
-                id=f"xref:{row.id}",
-                source=f"verse:{source.id}",
-                target=f"verse:{target.id}",
-                cross_reference_id=row.id,
-                native_category=row.native_category,
-                relation_type=row.relation_type,
-                provenance_level=row.provenance_level,
-                confidence=row.confidence,
+                id=f"xpair:{left_id}:{right_id}",
+                source=f"verse:{source_id}",
+                target=f"verse:{target_id}",
+                cross_reference_id=first.id,
+                cross_reference_ids=[row.id for row in evidence],
+                native_category=next(iter(categories)) if len(categories) == 1 else "MULTIPLE",
+                relation_type=next(iter(relation_types)) if len(relation_types) == 1 else None,
+                provenance_level="VERIFIED" if all(row.provenance_level == "VERIFIED" for row in evidence) else first.provenance_level,
+                confidence=max(row.confidence for row in evidence),
+                evidence_count=len(evidence),
+                bidirectional=bidirectional,
             )
         )
 
