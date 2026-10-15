@@ -67,7 +67,7 @@ h1 { margin: 8px 0 12px; font-size: clamp(3rem, 9vw, 7rem); line-height: .9; let
 }
 .graphExperience {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-columns: minmax(0, 1fr) 320px;
   height: 560px;
   min-height: 0;
   overflow: hidden;
@@ -90,47 +90,82 @@ h1 { margin: 8px 0 12px; font-size: clamp(3rem, 9vw, 7rem); line-height: .9; let
   height: 100% !important;
   max-height: 560px;
 }
-.graphHint {
+.graphHint,
+.graphJourneyBadge {
   position: absolute;
-  left: 18px;
-  bottom: 16px;
+  z-index: 2;
   padding: 8px 11px;
   border: 1px solid rgba(117, 145, 201, .25);
   border-radius: 999px;
   background: rgba(4, 7, 14, .72);
-  color: #7888a8;
+  color: #8998b5;
   font-size: .72rem;
   backdrop-filter: blur(12px);
   pointer-events: none;
 }
-.graphLabel {
-  border: 1px solid rgba(127, 156, 220, .34);
-  border-radius: 999px;
-  background: rgba(7, 11, 22, .84);
-  color: #d5e2ff;
-  padding: 5px 9px;
-  white-space: nowrap;
-  font: inherit;
-  font-size: .72rem;
-  cursor: pointer;
-  box-shadow: 0 5px 20px rgba(0, 0, 0, .28);
-  backdrop-filter: blur(8px);
+.graphHint { left: 18px; bottom: 16px; }
+.graphJourneyBadge {
+  right: 18px;
+  top: 16px;
+  color: #cfe2ff;
+  border-color: rgba(97, 150, 232, .34);
+  background: rgba(10, 20, 40, .72);
 }
-.graphLabel:hover, .graphLabel.selected { border-color: rgba(143, 183, 255, .9); color: #fff; }
-.graphLabel.focus { color: #eaf3ff; border-color: rgba(103, 163, 255, .65); font-weight: 700; }
+.graphLabelStatic {
+  display: none;
+}
 .graphInspector {
   height: 560px;
   overflow-y: auto;
-  padding: 28px 24px;
+  padding: 26px 22px 30px;
   border-left: 1px solid #1c2940;
-  background: rgba(8, 12, 23, .88);
+  background: rgba(8, 12, 23, .9);
+  scrollbar-width: thin;
+  scrollbar-color: #294166 transparent;
 }
-.graphInspector h3 { margin: 8px 0 26px; font-size: 1.85rem; letter-spacing: -.035em; }
-.graphInspector dl { margin: 0; }
-.graphInspector dl > div { padding: 12px 0; border-top: 1px solid #192238; }
-.graphInspector dt { color: #70819f; font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; }
-.graphInspector dd { margin: 4px 0 0; color: #d6e2f8; font-size: .9rem; }
-.inspectorNote { margin: 24px 0 0; color: #7f8ba3; font-size: .82rem; line-height: 1.6; }
+.graphInspector h3 { margin: 8px 0 18px; font-size: 1.8rem; letter-spacing: -.035em; }
+.graphInspector dl { margin: 18px 0 0; }
+.graphInspector dl > div { padding: 11px 0; border-top: 1px solid #192238; }
+.graphInspector dt { color: #70819f; font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; }
+.graphInspector dd { margin: 4px 0 0; color: #d6e2f8; font-size: .88rem; }
+.verseTextBlock {
+  padding: 15px 15px 14px;
+  border: 1px solid #243656;
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(19, 34, 59, .5), rgba(12, 15, 28, .74));
+}
+.verseTextLabel {
+  display: block;
+  margin-bottom: 10px;
+  color: #84aef0;
+  font-size: .66rem;
+  line-height: 1.4;
+  text-transform: uppercase;
+  letter-spacing: .09em;
+}
+.verseText {
+  margin: 0;
+  color: #e5ecf9;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: .98rem;
+  line-height: 1.65;
+}
+.verseTextState {
+  margin: 0;
+  color: #8d9bb3;
+  font-size: .84rem;
+  line-height: 1.55;
+}
+.verseTextState.error { color: #f2a5b1; }
+.sourceLink {
+  display: inline-block;
+  margin-top: 12px;
+  color: #8fb7ff;
+  font-size: .74rem;
+  text-decoration: none;
+}
+.sourceLink:hover { color: #d5e5ff; text-decoration: underline; }
+.inspectorNote { margin: 20px 0 0; color: #7f8ba3; font-size: .8rem; line-height: 1.6; }
 .graphLoading {
   display: grid;
   place-items: center;
@@ -201,16 +236,12 @@ article p { margin: 0; color: #8c97ad; line-height: 1.55; }
 @media (max-width: 900px) {
   .statsGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .bookGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .graphExperience {
-    grid-template-columns: 1fr;
-    height: auto;
-  }
-  .graphCanvasWrap {
-    height: 520px;
-  }
+  .graphExperience { grid-template-columns: 1fr; height: auto; }
+  .graphCanvasWrap { height: 520px; }
   .graphCanvasWrap canvas { max-height: 520px; }
   .graphInspector {
     height: auto;
+    max-height: none;
     overflow: visible;
     border-left: 0;
     border-top: 1px solid #1c2940;
@@ -223,8 +254,10 @@ article p { margin: 0; color: #8c97ad; line-height: 1.55; }
   .sectionHeading { align-items: start; flex-direction: column; }
   .graphCanvasWrap { height: 480px; }
   .graphCanvasWrap canvas { max-height: 480px; }
+  .graphHint { right: 14px; white-space: normal; }
 }
 
 @media (max-width: 520px) {
   .statsGrid, .bookGrid { grid-template-columns: 1fr; }
+  .graphJourneyBadge { display: none; }
 }
